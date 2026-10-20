@@ -78,6 +78,8 @@ PROJECT_ID="$(terraform output -raw project_id)"
 
 Terraform creates the Artifact Registry repository, runtime and deployer service accounts, restricted GitHub Workload Identity Federation, and empty Secret Manager entries. It also grants the runtime identity access to only the application's secrets. It does not create or store secret values.
 
+The federation trust uses the immutable GitHub repository and owner IDs in `terraform.tfvars.example`, plus the `main` branch claim. Keep those IDs aligned with the repository that should be allowed to deploy; do not loosen the branch condition.
+
 ### 2. Add runtime values to Secret Manager
 
 Create versions for `devobs-database-url`, `devobs-stripe-secret-key`, `devobs-stripe-webhook-secret`, and `devobs-resend-api-key`. Supply values through standard input so they do not appear in shell history or command arguments. For example:
@@ -101,6 +103,10 @@ In the repository's **Settings → Secrets and variables → Actions → Variabl
 | `GCP_RUNTIME_SERVICE_ACCOUNT` | Terraform output `runtime_service_account` |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Terraform output `workload_identity_provider` |
 | `GCP_DEPLOY_SERVICE_ACCOUNT` | Terraform output `deploy_service_account` |
+| `GCP_DATABASE_URL_SECRET_VERSION` | Numeric Secret Manager version containing `DATABASE_URL` |
+| `GCP_STRIPE_SECRET_KEY_SECRET_VERSION` | Numeric version containing `STRIPE_SECRET_KEY` |
+| `GCP_STRIPE_WEBHOOK_SECRET_VERSION` | Numeric version containing `STRIPE_WEBHOOK_SECRET` |
+| `GCP_RESEND_API_KEY_SECRET_VERSION` | Numeric version containing `RESEND_API_KEY` |
 | `APP_URL` | Canonical public HTTPS URL for the app |
 | `STRIPE_PRICE_MONITORING` | Stripe monthly Price ID for Monitoring |
 | `STRIPE_PRICE_CICD` | Stripe monthly Price ID for CI/CD |
@@ -109,11 +115,13 @@ In the repository's **Settings → Secrets and variables → Actions → Variabl
 | `CONTACT_FROM_EMAIL` | Sender verified with Resend |
 | `GCP_CLOUD_SQL_INSTANCE` | Optional `PROJECT:REGION:INSTANCE` connection name |
 
-After configuration, a push to `main` builds and pushes an immutable image, runs `prisma migrate deploy` as a Cloud Run Job, then deploys the application to Cloud Run. Database migration failure stops the release before the new application revision is deployed. The app image listens on port `8080` and runs as a non-root user.
+Use positive numeric Secret Manager version numbers, not `latest`. When rotating a secret, create its new version and update its matching GitHub repository variable; the next successful deployment pins a new Cloud Run revision to that version.
+
+The `CI` workflow now owns the production deployment dependency: on `main`, its deploy job can run only after the lint, typecheck, unit and integration tests, build, and container builds all pass. This also applies to a manually dispatched `CI` run on `main`, so adding the GCP variables later does not require an unrelated code change to deploy. It skips stale runs if `main` advances before deployment or before traffic is switched. It builds and pushes immutable images, runs `prisma migrate deploy` as a Cloud Run Job, then creates a tagged Cloud Run revision with no production traffic. The workflow checks `/api/health` through the candidate URL and shifts traffic only after the check passes, then removes the temporary candidate tag. Database migration or candidate health failure stops before production traffic is changed. The app image listens on port `8080` and runs as a non-root user.
 
 ### 4. Attach the domain and enable uptime alerts
 
-After the first deployment, set `domain_name` in `terraform.tfvars` and optionally set `notification_email`, then run `terraform plan` and `terraform apply` again. Add the DNS records shown by `terraform output domain_mapping_records` at your DNS provider. Cloud Run provisions and renews the HTTPS certificate after the records resolve. If an email notification channel is configured, verify it with Google Cloud Monitoring.
+After the first deployment, set `domain_name` in `terraform.tfvars` and optionally set `notification_email`, then run `terraform plan` and `terraform apply` again. Cloud Run direct domain mapping is supported only in `asia-east1`, `asia-northeast1`, `asia-southeast1`, `europe-north1`, `europe-west1`, `europe-west4`, `us-central1`, `us-east1`, `us-east4`, and `us-west1`; Terraform rejects other regions when a custom domain is configured. Add the DNS records shown by `terraform output domain_mapping_records` at your DNS provider. Cloud Run provisions and renews the HTTPS certificate after the records resolve. If an email notification channel is configured, verify it with Google Cloud Monitoring.
 
 The uptime check requests `https://<domain>/api/health` every minute from multiple regions. The endpoint returns `200` only when PostgreSQL responds, and returns a generic `503` otherwise; it does not return database details. The alert opens after the check has failed for two minutes.
 

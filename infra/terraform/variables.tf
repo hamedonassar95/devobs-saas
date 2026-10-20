@@ -26,10 +26,26 @@ variable "service_name" {
   default     = "devobs-saas"
 }
 
-variable "github_repository" {
-  description = "GitHub repository allowed to deploy through Workload Identity Federation."
+variable "github_repository_id" {
+  description = "Immutable GitHub repository ID allowed to deploy through Workload Identity Federation."
   type        = string
-  default     = "hamedonassar95/devobs-saas"
+  default     = "1427013208"
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "github_repository_id must contain only digits."
+  }
+}
+
+variable "github_repository_owner_id" {
+  description = "Immutable GitHub owner ID allowed to deploy through Workload Identity Federation."
+  type        = string
+  default     = "104053101"
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id must contain only digits."
+  }
 }
 
 variable "domain_name" {
