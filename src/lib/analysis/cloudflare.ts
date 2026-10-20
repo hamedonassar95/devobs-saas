@@ -67,11 +67,13 @@ export function isCloudflareWorkersAiConfigured(env: CloudflareEnvironment = pro
 
 export function redactAlertText(value: string): string {
   return value
+    .replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g, "[REDACTED_PRIVATE_KEY]")
+    .replace(/((?:https?|postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[REDACTED]@")
     .replace(/\bBearer\s+[^\s,;]+/gi, "Bearer [REDACTED]")
-    .replace(/\b(?:sk-[A-Za-z0-9_-]{16,}|sb_secret_[A-Za-z0-9_-]+|github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9_]+|glpat-[A-Za-z0-9_-]+|xox[baprs]-[A-Za-z0-9-]+)\b/g, "[REDACTED_SECRET]")
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED_SECRET]")
-    .replace(/\b(password|passwd|secret|api[_-]?key|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
-    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[REDACTED]@")
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{16,}|(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{12,}|whsec_[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{35}|GOCSPX-[A-Za-z0-9_-]{16,}|ya29\.[A-Za-z0-9._-]{16,}|sb_secret_[A-Za-z0-9_-]+|github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9_]+|glpat-[A-Za-z0-9_-]+|xox[baprs]-[A-Za-z0-9-]+|npm_[A-Za-z0-9]{20,}|pypi-[A-Za-z0-9_-]{20,})\b/gi, "[REDACTED_SECRET]")
+    .replace(/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, "[REDACTED_SECRET]")
+    .replace(/\b(password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|credential|client[_-]?secret|private[_-]?key)\s*[:=]\s*(?:"[^"]*"|'[^']*'|(?:bearer\s+)?[^\s,;]+)/gi, "$1=[REDACTED]")
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{8,}\b/g, "[REDACTED_JWT]")
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[REDACTED_EMAIL]")
     .slice(0, MAX_ALERT_TEXT_LENGTH);
 }

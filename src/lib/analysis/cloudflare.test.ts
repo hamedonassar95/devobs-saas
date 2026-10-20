@@ -49,6 +49,39 @@ describe("Cloudflare Workers AI alert analysis", () => {
       .toBe("Bearer [REDACTED] password=[REDACTED] [REDACTED_SECRET] [REDACTED_EMAIL]");
   });
 
+  it("redacts Stripe, Google, package-registry, JWT, and database URL credentials", () => {
+    const text = [
+      `stripe=sk_live_${"s".repeat(24)}`,
+      `webhook=whsec_${"w".repeat(24)}`,
+      `google=AIza${"G".repeat(35)}`,
+      `npm=npm_${"n".repeat(24)}`,
+      `token=eyJ${"a".repeat(20)}.${"b".repeat(20)}.${"c".repeat(20)}`,
+      "postgresql://db_user:db_password@db.example.test:5432/app",
+      "authorization=Bearer opaque-access-token",
+    ].join(" ");
+
+    const redacted = redactAlertText(text);
+
+    expect(redacted).not.toContain("sk_live_");
+    expect(redacted).not.toContain("whsec_");
+    expect(redacted).not.toContain("AIza");
+    expect(redacted).not.toContain("npm_");
+    expect(redacted).not.toContain("eyJ");
+    expect(redacted).not.toContain("db_user");
+    expect(redacted).not.toContain("db_password");
+    expect(redacted).not.toContain("opaque-access-token");
+    expect(redacted).toContain("postgresql://[REDACTED]@db.example.test:5432/app");
+  });
+
+  it("removes multiline private-key material, including a truncated block", () => {
+    const redacted = redactAlertText("key=\n-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----\nnext=ok");
+    expect(redacted).not.toContain("private-material");
+    expect(redacted).toContain("[REDACTED_PRIVATE_KEY]");
+
+    const truncated = redactAlertText("-----BEGIN RSA PRIVATE KEY-----\nprivate-material-without-end-marker");
+    expect(truncated).not.toContain("private-material");
+  });
+
   it("sends one bounded request to the fixed Cloudflare endpoint and validates the response", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       result: {
