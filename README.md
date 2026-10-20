@@ -33,3 +33,9 @@ Configure a Stripe webhook endpoint at `<APP_URL>/api/billing/webhook` for `chec
 An organization owner can open `/billing`, choose one of the three plans, and complete Stripe Checkout. First-time subscriptions receive one 14-day trial per organization; canceled or expired organizations do not receive another trial. The signed webhook updates subscription access. A period-end cancellation remains active through the paid/trial period and access stops when Stripe reports the subscription canceled. Billing and feature checks are organization-scoped and protected by PostgreSQL RLS.
 
 Plan access: Monitoring only includes monitoring sources and alerts; CI/CD includes CI/CD integrations; Full with AI includes monitoring, CI/CD, and AI analysis. Resource API routes return HTTP 402 when the organization lacks an active or trialing subscription with that feature.
+
+## Marketing page and contact form (Phase 4)
+
+The home page presents the product features, monthly plans, and 14-day trial. When `STRIPE_SECRET_KEY` and the three `STRIPE_PRICE_*` values are configured, plan amounts are read from Stripe and cached for up to one hour. If Stripe pricing is not configured or temporarily unavailable, the page says that the current amount will be confirmed at Checkout; Checkout remains the source of truth.
+
+The contact form sends messages through Resend. Set `RESEND_API_KEY`, `CONTACT_EMAIL` (the inbox that receives inquiries), and `CONTACT_FROM_EMAIL` (a sender address verified for your Resend account). The example sender `onboarding@resend.dev` is only suitable for Resend's test setup; use an address on a verified domain for production. These are server-side values and must not be exposed with a `NEXT_PUBLIC_` prefix. The endpoint validates input, uses a hidden honeypot field, and limits repeated submissions per server instance.

@@ -14,12 +14,17 @@ Tenant-aware foundations are implemented on `main`:
 4. Tenant-linked CI/CD integrations, monitoring sources, alerts, and analysis results.
 5. Automated tests proving that cross-tenant reads and writes are denied.
 
-## Current Phase 3 scope
+## Completed Phase 3 scope
 - Add Stripe monthly subscriptions for Monitoring only, CI/CD, and Full with AI.
 - Add authenticated Checkout and Customer Portal routes, signed webhooks for subscription activation/status/cancellation, and a 14-day trial for first-time subscriptions.
 - Enforce plan feature entitlements on tenant-scoped CI/CD, monitoring, and AI analysis resource routes.
 - Keep billing records tenant-scoped and add tests for authorization, entitlements, and webhook updates.
-- Do not implement the marketing landing page or cloud deployment in this phase.
+
+## Current Phase 4 scope
+- Build the public landing page with the headline, problems solved, three core features, monthly pricing, a 14-day trial CTA, and a contact form.
+- Keep displayed prices aligned with the configured monthly Stripe Prices; do not invent dollar amounts.
+- Keep contact delivery server-side and use environment variables for email provider credentials and recipient/sender settings.
+- Do not implement Google Cloud deployment in this phase.
 
 ## Engineering rules
 - Work on a feature branch based on `main`; never commit directly to `main`.
@@ -31,5 +36,6 @@ Tenant-aware foundations are implemented on `main`:
 - Mark material assumptions clearly and ask before choosing an authentication provider or other consequential product behavior not specified by the user.
 
 ## Current repository state
-- Phase 2 has been merged into `main` in PR #1.
-- Phase 3 is being developed on `phase3-stripe-billing`; open a PR to `main` after tests pass and do not merge without explicit user confirmation.
+- Phase 2 was merged into `main` in PR #1.
+- Phase 3 was merged into `main` in PR #2.
+- Phase 4 is being developed on `phase4-landing-page`; open a PR to `main` after tests pass and do not merge without explicit user confirmation.
