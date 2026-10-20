@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
-import { isCloudflareWorkersAiConfigured } from "@/lib/analysis/cloudflare";
+import { isCloudflareWorkersAiConfigured, isCloudflareWorkersAiFreePlanConfirmed } from "@/lib/analysis/cloudflare";
+import { getDailyAiRequestLimit, getUtcDayStart } from "@/lib/analysis/usage";
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { TenantAccessError, TenantPermissionError, requireTenantContextForPermission, withTenantTransaction } from "@/lib/tenant/access";
 
@@ -12,16 +13,34 @@ export async function GET(_request: Request, context: RouteContext) {
   const { organizationId } = await context.params;
   try {
     const tenant = await requireTenantContextForPermission(await getAuthenticatedUserId(), organizationId, "read");
-    const setting = await withTenantTransaction(tenant, async (tx) => tx.organization.findUnique({
-      where: { id: tenant.organizationId },
-      select: { aiAnalysisEnabled: true },
-    }));
+    const usageDay = getUtcDayStart();
+    const { setting, usage } = await withTenantTransaction(tenant, async (tx) => {
+      const setting = await tx.organization.findUnique({
+        where: { id: tenant.organizationId },
+        select: { aiAnalysisEnabled: true },
+      });
+      const usage = await tx.aiAnalysisUsageDaily.findUnique({
+        where: { organizationId_day: { organizationId: tenant.organizationId, day: usageDay } },
+      });
+      return { setting, usage };
+    });
     if (!setting) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+    const outcomes = (usage?.succeeded ?? 0) + (usage?.failed ?? 0);
     return NextResponse.json({
       enabled: setting.aiAnalysisEnabled,
       providerAvailable: isCloudflareWorkersAiConfigured(),
       provider: "Cloudflare Workers AI",
-      dataHandling: "When enabled, redacted alert titles and descriptions are sent to Cloudflare Workers AI for analysis.",
+      freePlanConfirmed: isCloudflareWorkersAiFreePlanConfirmed(),
+      dailyRequestLimitPerOrganization: getDailyAiRequestLimit() ?? 0,
+      usageToday: {
+        requestsReserved: usage?.requests ?? 0,
+        succeeded: usage?.succeeded ?? 0,
+        failed: usage?.failed ?? 0,
+        outcomesPending: Math.max(0, (usage?.requests ?? 0) - outcomes),
+        averageLatencyMs: outcomes ? Math.round((usage?.totalLatencyMs ?? 0) / outcomes) : null,
+        window: "UTC day",
+      },
+      dataHandling: "When enabled, redacted alert text and normalized severity, status, and source type are sent to Cloudflare Workers AI for analysis.",
     });
   } catch (error) {
     if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404 });

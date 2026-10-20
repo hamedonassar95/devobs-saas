@@ -11,10 +11,17 @@ const alert = {
   description: "Postgres password=hunter2; request failed.",
   severity: "CRITICAL" as const,
   status: "OPEN" as const,
+  sourceProvider: "PROMETHEUS" as const,
+};
+const freePlanEnvironment = {
+  CLOUDFLARE_WORKERS_AI_ENABLED: "true",
+  CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED: "true",
+  CLOUDFLARE_ACCOUNT_ID: config.accountId,
+  CLOUDFLARE_API_TOKEN: config.apiToken,
 };
 
 describe("Cloudflare Workers AI alert analysis", () => {
-  it("is disabled unless the feature flag, account ID, and token are all configured", () => {
+  it("fails closed unless the feature flag, free-plan confirmation, account ID, and token are all configured", () => {
     expect(getCloudflareWorkersAiConfig({})).toBeNull();
     expect(getCloudflareWorkersAiConfig({
       CLOUDFLARE_WORKERS_AI_ENABLED: "true",
@@ -25,7 +32,12 @@ describe("Cloudflare Workers AI alert analysis", () => {
       CLOUDFLARE_WORKERS_AI_ENABLED: "true",
       CLOUDFLARE_ACCOUNT_ID: config.accountId,
       CLOUDFLARE_API_TOKEN: config.apiToken,
-    })).toEqual(config);
+    })).toBeNull();
+    expect(getCloudflareWorkersAiConfig(freePlanEnvironment)).toEqual(config);
+    expect(getCloudflareWorkersAiConfig({
+      ...freePlanEnvironment,
+      CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG: "101",
+    })).toBeNull();
   });
 
   it("redacts credentials and email addresses before preparing provider input", () => {
@@ -56,8 +68,11 @@ describe("Cloudflare Workers AI alert analysis", () => {
     expect(body.messages[0].content).toContain("untrusted evidence");
     expect(body.messages[1].content).toContain("[REDACTED_EMAIL]");
     expect(body.messages[1].content).toContain("password=[REDACTED]");
+    expect(body.messages[0].content).toContain("canonical alert contract");
+    expect(body.messages[1].content).toContain('"sourceProvider":"PROMETHEUS"');
     expect(body.max_tokens).toBe(350);
     expect(result.details.engine).toBe("cloudflare-workers-ai");
+    expect(result.details.sourceProvider).toBe("PROMETHEUS");
     expect(result.details.nextSteps).toHaveLength(1);
   });
 

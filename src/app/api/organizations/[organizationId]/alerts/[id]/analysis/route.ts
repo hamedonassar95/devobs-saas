@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { analyzeAlert } from "@/lib/analysis/service";
 import { CLOUDFLARE_ANALYSIS_MODEL_ID, getCloudflareWorkersAiConfig } from "@/lib/analysis/cloudflare";
+import { getDailyAiRequestLimit, getUtcDayStart, recordAiAnalysisOutcome, reserveAiAnalysisRequest } from "@/lib/analysis/usage";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { TenantAccessError, TenantPermissionError, requireTenantContextForPermission, withTenantTransaction } from "@/lib/tenant/access";
@@ -11,9 +12,15 @@ export async function POST(_request: Request, context: RouteContext) {
   const { organizationId, id } = await context.params;
   try {
     const tenant = await requireTenantContextForPermission(await getAuthenticatedUserId(), organizationId, "write");
+    const usageDay = getUtcDayStart();
+    const aiConfig = getCloudflareWorkersAiConfig();
+    const dailyLimit = getDailyAiRequestLimit();
     const prepared = await withTenantTransaction(tenant, async (tx) => {
       await requirePlanFeature(tx, tenant.organizationId, featureForResource("analysis-results"));
-      const alert = await tx.alert.findFirst({ where: { id, organizationId: tenant.organizationId } });
+      const alert = await tx.alert.findFirst({
+        where: { id, organizationId: tenant.organizationId },
+        include: { source: { select: { provider: true } } },
+      });
       if (!alert) return null;
       const organization = await tx.organization.findUnique({
         where: { id: tenant.organizationId },
@@ -21,7 +28,15 @@ export async function POST(_request: Request, context: RouteContext) {
       });
       if (!organization) return null;
 
-      if (organization.aiAnalysisEnabled && getCloudflareWorkersAiConfig()) {
+      const result = {
+        alert,
+        aiEnabled: organization.aiAnalysisEnabled,
+        cached: null as Awaited<ReturnType<typeof tx.analysisResult.findFirst>>,
+        dailyLimitReached: false,
+        usageReserved: false,
+      };
+
+      if (organization.aiAnalysisEnabled && aiConfig) {
         const cached = await tx.analysisResult.findFirst({
           where: {
             organizationId: tenant.organizationId,
@@ -31,18 +46,54 @@ export async function POST(_request: Request, context: RouteContext) {
           },
           orderBy: { createdAt: "desc" },
         });
-        if (cached) return { alert, aiEnabled: true, cached };
+        if (cached) return { ...result, cached };
+
+        const reservation = await reserveAiAnalysisRequest(
+          tx,
+          tenant.organizationId,
+          usageDay,
+          dailyLimit ?? 0,
+        );
+        if (reservation === null) return { ...result, aiEnabled: false, dailyLimitReached: true };
+        return { ...result, usageReserved: true };
       }
-      return { alert, aiEnabled: organization.aiAnalysisEnabled, cached: null };
+      return result;
     });
     if (!prepared) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (prepared.cached) return NextResponse.json({ item: prepared.cached }, { status: 200 });
 
-    const analysis = await analyzeAlert(prepared.alert, prepared.aiEnabled);
+    let analysis = await analyzeAlert({
+      title: prepared.alert.title,
+      description: prepared.alert.description,
+      severity: prepared.alert.severity,
+      status: prepared.alert.status,
+      sourceProvider: prepared.alert.source?.provider === "PROMETHEUS" || prepared.alert.source?.provider === "GRAFANA"
+        ? prepared.alert.source.provider
+        : null,
+    }, prepared.aiEnabled);
+    if (prepared.dailyLimitReached) {
+      analysis = {
+        ...analysis,
+        model: "local-rules-daily-limit",
+        details: {
+          ...analysis.details,
+          note: `The organization's daily Cloudflare Workers AI request limit (${dailyLimit ?? 0}) was reached. Local deterministic guidance was returned; no provider request was made.`,
+        },
+      };
+    }
     const { model } = analysis;
 
     const currentTenant = await requireTenantContextForPermission(await getAuthenticatedUserId(), organizationId, "write");
     const result = await withTenantTransaction(currentTenant, async (tx) => {
+      if (prepared.usageReserved && analysis.providerCall.attempted) {
+        await recordAiAnalysisOutcome(
+          tx,
+          currentTenant.organizationId,
+          usageDay,
+          analysis.providerCall.outcome === "succeeded" ? "succeeded" : "failed",
+          analysis.providerCall.durationMs,
+        );
+      }
       await requirePlanFeature(tx, currentTenant.organizationId, featureForResource("analysis-results"));
       const currentAlert = await tx.alert.findFirst({
         where: { id, organizationId: currentTenant.organizationId },

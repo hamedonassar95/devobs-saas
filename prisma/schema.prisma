@@ -71,19 +71,20 @@ enum SubscriptionStatus {
 }
 
 model Organization {
-  id                String             @id @default(cuid())
-  name              String
-  slug              String             @unique
-  aiAnalysisEnabled Boolean            @default(false)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  memberships       Membership[]
-  ciCdIntegrations  CiCdIntegration[]
-  monitoringSources MonitoringSource[]
-  alerts            Alert[]
-  analysisResults   AnalysisResult[]
-  stripeCustomerId  String?            @unique
-  subscriptions     Subscription[]
+  id                   String                 @id @default(cuid())
+  name                 String
+  slug                 String                 @unique
+  aiAnalysisEnabled    Boolean                @default(false)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  memberships          Membership[]
+  ciCdIntegrations     CiCdIntegration[]
+  monitoringSources    MonitoringSource[]
+  alerts               Alert[]
+  analysisResults      AnalysisResult[]
+  aiAnalysisUsageDaily AiAnalysisUsageDaily[]
+  stripeCustomerId     String?                @unique
+  subscriptions        Subscription[]
 
   @@unique([id, slug])
   @@map("organizations")
@@ -229,6 +230,21 @@ model AnalysisResult {
   @@index([organizationId, createdAt])
   @@index([organizationId, alertId])
   @@map("analysis_results")
+}
+
+model AiAnalysisUsageDaily {
+  organizationId String
+  day            DateTime     @db.Date
+  requests       Int          @default(0)
+  succeeded      Int          @default(0)
+  failed         Int          @default(0)
+  totalLatencyMs Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, day])
+  @@map("ai_analysis_usage_daily")
 }
 
 model Subscription {
