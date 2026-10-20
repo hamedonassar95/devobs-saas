@@ -25,7 +25,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       setBusy(false);
       return;
     }
-    router.replace("/");
+    router.replace(mode === "register" ? "/billing" : "/");
     router.refresh();
   }
 

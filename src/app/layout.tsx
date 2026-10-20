@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Devobs SaaS",
-  description: "Multi-tenant DevOps platform",
+  title: "Devobs — Ship with confidence. Stay in control.",
+  description:
+    "CI/CD, monitoring, and AI-assisted incident analysis in one clear workspace for lean engineering teams.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
       <body>{children}</body>
