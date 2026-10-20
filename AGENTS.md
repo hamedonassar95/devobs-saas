@@ -20,11 +20,16 @@ Tenant-aware foundations are implemented on `main`:
 - Enforce plan feature entitlements on tenant-scoped CI/CD, monitoring, and AI analysis resource routes.
 - Keep billing records tenant-scoped and add tests for authorization, entitlements, and webhook updates.
 
-## Current Phase 4 scope
+## Completed Phase 4 scope
 - Build the public landing page with the headline, problems solved, three core features, monthly pricing, a 14-day trial CTA, and a contact form.
 - Keep displayed prices aligned with the configured monthly Stripe Prices; do not invent dollar amounts.
 - Keep contact delivery server-side and use environment variables for email provider credentials and recipient/sender settings.
-- Do not implement Google Cloud deployment in this phase.
+
+## Current Phase 5 scope
+- Prepare a production deployment on Google Cloud Run, including a container build, database migration job, and GitHub Actions authentication through Workload Identity Federation.
+- Use Secret Manager for runtime credentials and never store populated secrets or Terraform state in Git.
+- Support a verified custom domain with Google-managed HTTPS, an HTTPS health check, and an availability alert.
+- Google Cloud project ID: not supplied yet. Do not invent one or deploy until the owner provides the target project and access is available.
 
 ## Engineering rules
 - Work on a feature branch based on `main`; never commit directly to `main`.
@@ -38,4 +43,5 @@ Tenant-aware foundations are implemented on `main`:
 ## Current repository state
 - Phase 2 was merged into `main` in PR #1.
 - Phase 3 was merged into `main` in PR #2.
-- Phase 4 is being developed on `phase4-landing-page`; open a PR to `main` after tests pass and do not merge without explicit user confirmation.
+- Phase 4 was merged into `main` in PR #3.
+- Phase 5 deployment configuration is being developed on `phase5-google-cloud`; open a PR to `main` after tests pass and do not merge without explicit user confirmation.

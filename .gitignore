@@ -9,3 +9,8 @@ coverage/
 *.log
 .DS_Store
 *.tsbuildinfo
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfvars
+!infra/terraform/terraform.tfvars.example

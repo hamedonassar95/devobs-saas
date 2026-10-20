@@ -1,0 +1,10 @@
+project_id          = "replace-with-your-google-cloud-project-id"
+region              = "us-central1"
+artifact_repository = "devobs-saas"
+service_name        = "devobs-saas"
+github_repository   = "hamedonassar95/devobs-saas"
+enable_cloud_sql    = false
+
+# Set these only after the first Cloud Run deployment and domain verification.
+domain_name        = ""
+notification_email = ""
