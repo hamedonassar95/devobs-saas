@@ -94,6 +94,7 @@ export async function POST(_request: Request, context: RouteContext) {
           usageDay,
           analysis.providerCall.outcome === "succeeded" ? "succeeded" : "failed",
           analysis.providerCall.durationMs,
+          analysis.providerCall.tokenUsage,
         );
       }
       await requirePlanFeature(tx, currentTenant.organizationId, featureForResource("analysis-results"));

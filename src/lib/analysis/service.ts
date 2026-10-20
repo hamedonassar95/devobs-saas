@@ -7,6 +7,7 @@ import {
   type CloudflareEnvironment,
 } from "@/lib/analysis/cloudflare";
 import { analyzeAlertWithLocalRules, type RuleBasedAnalysis } from "@/lib/analysis/rules";
+import type { AiTokenUsage } from "@/lib/analysis/usage";
 
 export type StoredAlertAnalysis = {
   summary: string;
@@ -16,6 +17,7 @@ export type StoredAlertAnalysis = {
     attempted: boolean;
     outcome: "succeeded" | "failed" | "not-used";
     durationMs: number;
+    tokenUsage: AiTokenUsage | null;
   };
 };
 
@@ -34,7 +36,7 @@ export async function analyzeAlert(
     return {
       ...local,
       model: "local-rules-v1",
-      providerCall: { attempted: false, outcome: "not-used", durationMs: 0 },
+      providerCall: { attempted: false, outcome: "not-used", durationMs: 0, tokenUsage: null },
       details: {
         ...local.details,
         note: "Organization AI opt-in is disabled. Guidance was generated locally from fixed rules; no alert data left the application.",
@@ -47,7 +49,7 @@ export async function analyzeAlert(
     return {
       ...local,
       model: "local-rules-fallback",
-      providerCall: { attempted: false, outcome: "not-used", durationMs: 0 },
+      providerCall: { attempted: false, outcome: "not-used", durationMs: 0, tokenUsage: null },
       details: {
         ...local.details,
         note: "AI analysis is enabled for this organization, but the application provider is unavailable. Deterministic local guidance is returned without an external request.",
@@ -57,17 +59,22 @@ export async function analyzeAlert(
 
   const startedAt = Date.now();
   try {
-    const result = await analyzeAlertWithCloudflare(alert, config, options.fetcher);
+    const { tokenUsage, ...result } = await analyzeAlertWithCloudflare(alert, config, options.fetcher);
     return {
       ...result,
       model: CLOUDFLARE_ANALYSIS_MODEL_ID,
-      providerCall: { attempted: true, outcome: "succeeded", durationMs: Math.max(0, Date.now() - startedAt) },
+      providerCall: {
+        attempted: true,
+        outcome: "succeeded",
+        durationMs: Math.max(0, Date.now() - startedAt),
+        tokenUsage,
+      },
     };
   } catch {
     return {
       ...local,
       model: "local-rules-fallback",
-      providerCall: { attempted: true, outcome: "failed", durationMs: Math.max(0, Date.now() - startedAt) },
+      providerCall: { attempted: true, outcome: "failed", durationMs: Math.max(0, Date.now() - startedAt), tokenUsage: null },
       details: {
         ...local.details,
         note: "Cloudflare Workers AI was unavailable. Deterministic local guidance is returned; no provider retry was made.",

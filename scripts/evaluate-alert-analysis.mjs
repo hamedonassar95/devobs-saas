@@ -140,11 +140,20 @@ function validateAnalysis(record, line) {
   if (!isProvider && !LOCAL_MODELS.has(analysis.model)) fail(`outputs line ${line} has an unknown local model`);
 
   const call = analysis.providerCall;
-  if (!exactKeys(call, ["attempted", "outcome", "durationMs"])
+  const tokenUsage = call?.tokenUsage;
+  const validTokenUsage = tokenUsage === null || (exactKeys(tokenUsage, ["promptTokens", "completionTokens"])
+    && Number.isSafeInteger(tokenUsage.promptTokens) && tokenUsage.promptTokens > 0
+    && Number.isSafeInteger(tokenUsage.completionTokens) && tokenUsage.completionTokens >= 0
+    && tokenUsage.promptTokens + tokenUsage.completionTokens <= 32_000);
+  if (!exactKeys(call, ["attempted", "outcome", "durationMs", "tokenUsage"])
     || typeof call.attempted !== "boolean"
     || !["succeeded", "failed", "not-used"].includes(call.outcome)
-    || typeof call.durationMs !== "number" || !Number.isFinite(call.durationMs) || call.durationMs < 0 || call.durationMs > 60_000) {
+    || typeof call.durationMs !== "number" || !Number.isFinite(call.durationMs) || call.durationMs < 0 || call.durationMs > 60_000
+    || !validTokenUsage) {
     fail(`outputs line ${line} has invalid provider-call metadata`);
+  }
+  if (tokenUsage !== null && (!call.attempted || call.outcome !== "succeeded")) {
+    fail(`outputs line ${line} has token usage without a successful provider call`);
   }
   if ((isProvider && (!call.attempted || call.outcome !== "succeeded"))
     || (!isProvider && call.outcome === "succeeded")

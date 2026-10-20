@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit } from "@/lib/analysis/usage";
+import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, type AiTokenUsage } from "@/lib/analysis/usage";
 
 export const CLOUDFLARE_ANALYSIS_MODEL_ID = "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8";
 const CLOUDFLARE_MODEL_PATH = "@cf/meta/llama-3.1-8b-instruct-fp8";
@@ -16,6 +16,7 @@ export type AlertForAiAnalysis = {
 
 export type CloudflareAnalysis = {
   summary: string;
+  tokenUsage: AiTokenUsage | null;
   details: {
     engine: "cloudflare-workers-ai";
     model: string;
@@ -110,6 +111,26 @@ function extractModelText(body: unknown): string | null {
   return typeof response === "string" ? response.trim() : null;
 }
 
+function extractTokenUsage(body: unknown): AiTokenUsage | null {
+  if (!body || typeof body !== "object") return null;
+  const result = (body as { result?: unknown }).result;
+  if (!result || typeof result !== "object") return null;
+  const usage = (result as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== "object") return null;
+  const { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: totalTokens } = usage as {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    total_tokens?: unknown;
+  };
+  if (typeof promptTokens !== "number" || typeof completionTokens !== "number"
+    || !Number.isSafeInteger(promptTokens) || !Number.isSafeInteger(completionTokens)
+    || promptTokens < 1 || completionTokens < 0
+    || promptTokens + completionTokens > 32_000) return null;
+  if (totalTokens !== undefined && (!Number.isSafeInteger(totalTokens)
+    || typeof totalTokens !== "number" || totalTokens !== promptTokens + completionTokens)) return null;
+  return { promptTokens, completionTokens };
+}
+
 function parseModelOutput(text: string) {
   const jsonText = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   try {
@@ -154,6 +175,7 @@ export async function analyzeAlertWithCloudflare(
 
   return {
     summary: parsed.data.summary,
+    tokenUsage: extractTokenUsage(body),
     details: {
       engine: "cloudflare-workers-ai",
       model: CLOUDFLARE_ANALYSIS_MODEL_ID,

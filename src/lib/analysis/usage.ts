@@ -7,6 +7,35 @@ export const MAX_DAILY_AI_REQUEST_LIMIT_PLATFORM = 100;
 
 export type AiProviderOutcome = "succeeded" | "failed";
 
+export type AiTokenUsage = {
+  promptTokens: number;
+  completionTokens: number;
+};
+
+// Cloudflare model-page rates checked on 2026-10-20 for the pinned model.
+// Nano-USD keeps the per-token estimate exact without floating-point writes.
+export const CLOUDFLARE_AI_PRICING_CHECKED_ON = "2026-10-20";
+const CLOUDFLARE_INPUT_NANO_USD_PER_TOKEN = 152;
+const CLOUDFLARE_OUTPUT_NANO_USD_PER_TOKEN = 287;
+
+export function estimateAiCostNanoUsd(usage: AiTokenUsage): bigint {
+  return BigInt(usage.promptTokens) * BigInt(CLOUDFLARE_INPUT_NANO_USD_PER_TOKEN)
+    + BigInt(usage.completionTokens) * BigInt(CLOUDFLARE_OUTPUT_NANO_USD_PER_TOKEN);
+}
+
+export function summarizeAiCostEstimate(
+  requestsReserved: number,
+  usageReports: number,
+  estimatedCostNanoUsd: bigint,
+): { costEstimateUsd: number | null; usageCoveragePercent: number | null; costEstimateComplete: boolean } {
+  const costEstimateComplete = usageReports === requestsReserved;
+  return {
+    costEstimateUsd: costEstimateComplete ? Number(estimatedCostNanoUsd) / 1_000_000_000 : null,
+    usageCoveragePercent: requestsReserved === 0 ? null : Math.round((usageReports / requestsReserved) * 100),
+    costEstimateComplete,
+  };
+}
+
 export function getUtcDayStart(date: Date = new Date()): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
@@ -91,13 +120,21 @@ export async function recordAiAnalysisOutcome(
   day: Date,
   outcome: AiProviderOutcome,
   latencyMs: number,
+  tokenUsage: AiTokenUsage | null,
 ): Promise<void> {
   const boundedLatencyMs = Math.max(0, Math.min(MAX_DAILY_AI_REQUEST_LIMIT_PER_ORGANIZATION * 60_000, Math.round(latencyMs)));
+  const tokenMetrics = tokenUsage ? {
+    inputTokens: { increment: tokenUsage.promptTokens },
+    outputTokens: { increment: tokenUsage.completionTokens },
+    usageReports: { increment: 1 },
+    estimatedCostNanoUsd: { increment: estimateAiCostNanoUsd(tokenUsage) },
+  } : {};
   await tx.aiAnalysisUsageDaily.update({
     where: { organizationId_day: { organizationId, day: getUtcDayStart(day) } },
     data: {
       [outcome]: { increment: 1 },
       totalLatencyMs: { increment: boundedLatencyMs },
+      ...tokenMetrics,
     },
   });
   await tx.aiProviderUsageDaily.update({
@@ -105,6 +142,7 @@ export async function recordAiAnalysisOutcome(
     data: {
       [outcome]: { increment: 1 },
       totalLatencyMs: { increment: boundedLatencyMs },
+      ...tokenMetrics,
     },
   });
 }
