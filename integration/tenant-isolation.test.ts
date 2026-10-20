@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { requireTenantContext, requireTenantContextForPermission, TenantPermissionError, withTenantTransaction, type TenantContext } from "@/lib/tenant/access";
 import { createTenantResource, deleteTenantResource, getTenantResource, listTenantResource, updateTenantResource } from "@/lib/tenant/resources";
 import { PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { applyStripeSubscriptionSnapshot } from "@/lib/billing/stripe-events";
 import { consumeAuthAttempt, resetAuthAttempts } from "@/lib/auth/rate-limit";
+import { POST as receiveMonitoringWebhook } from "@/app/api/webhooks/monitoring/[organizationId]/[sourceId]/route";
+import { createMonitoringWebhookToken, hashMonitoringWebhookToken } from "@/lib/monitoring/webhook-token";
 
 const suffix = randomUUID();
 let organizationAId = "";
@@ -20,6 +22,10 @@ let integrationAId = "";
 let integrationBId = "";
 let monitoringSourceAId = "";
 let monitoringSourceBId = "";
+let monitoringWebhookCredentialAHash = "";
+let monitoringWebhookCredentialBHash = "";
+let monitoringWebhookTokenA = "";
+let monitoringWebhookTokenB = "";
 let analysisAId = "";
 let analysisBId = "";
 const stripeEventIds: string[] = [];
@@ -61,6 +67,16 @@ describe("PostgreSQL tenant isolation policies", () => {
     }));
     monitoringSourceAId = sourceA.id;
     monitoringSourceBId = sourceB.id;
+    monitoringWebhookTokenA = createMonitoringWebhookToken();
+    monitoringWebhookTokenB = createMonitoringWebhookToken();
+    monitoringWebhookCredentialAHash = hashMonitoringWebhookToken(monitoringWebhookTokenA);
+    monitoringWebhookCredentialBHash = hashMonitoringWebhookToken(monitoringWebhookTokenB);
+    await withTenantTransaction(tenantA, (tx) => tx.monitoringWebhookCredential.create({
+      data: { organizationId: orgA.id, sourceId: sourceA.id, tokenHash: monitoringWebhookCredentialAHash },
+    }));
+    await withTenantTransaction(tenantB, (tx) => tx.monitoringWebhookCredential.create({
+      data: { organizationId: orgB.id, sourceId: sourceB.id, tokenHash: monitoringWebhookCredentialBHash },
+    }));
 
     const alertA = await withTenantTransaction(tenantA, (tx) => tx.alert.create({
       data: { organizationId: orgA.id, sourceId: sourceA.id, title: `Alert A ${suffix}`, severity: "WARNING" },
@@ -105,6 +121,65 @@ describe("PostgreSQL tenant isolation policies", () => {
     await expect(prisma.alert.create({
       data: { organizationId: organizationAId, title: "Missing context", severity: "WARNING" },
     })).rejects.toThrow();
+    expect(await prisma.monitoringWebhookCredential.findMany({})).toEqual([]);
+    await expect(prisma.monitoringWebhookCredential.create({
+      data: { organizationId: organizationAId, sourceId: monitoringSourceAId, tokenHash: createHash("sha256").update("no-context").digest("hex") },
+    })).rejects.toThrow();
+  });
+
+  it("keeps monitoring webhook credentials isolated by organization", async () => {
+    const ownCredentials = await withTenantTransaction(tenantA, (tx) => tx.monitoringWebhookCredential.findMany({ select: { tokenHash: true } }));
+    const crossTenantCredential = await withTenantTransaction(tenantA, (tx) => tx.monitoringWebhookCredential.findFirst({
+      where: { organizationId: organizationBId, sourceId: monitoringSourceBId },
+    }));
+
+    expect(ownCredentials.map((credential) => credential.tokenHash)).toEqual([monitoringWebhookCredentialAHash]);
+    expect(crossTenantCredential).toBeNull();
+    expect(await withTenantTransaction(tenantB, (tx) => tx.monitoringWebhookCredential.findMany({ select: { tokenHash: true } })))
+      .toMatchObject([{ tokenHash: monitoringWebhookCredentialBHash }]);
+  });
+
+  it("authenticates monitoring webhooks, upserts provider events, and blocks cross-tenant delivery", async () => {
+    await withTenantTransaction(tenantA, (tx) => tx.subscription.create({
+      data: { organizationId: organizationAId, stripeSubscriptionId: `sub_webhook_${suffix}`, plan: "MONITORING", status: "ACTIVE" },
+    }));
+    const fingerprint = `webhook-${suffix}`;
+    const payload = {
+      status: "firing",
+      alerts: [{
+        status: "firing",
+        fingerprint,
+        labels: { alertname: `Webhook CPU ${suffix}`, severity: "critical" },
+        annotations: { summary: "CPU is high", description: "CPU exceeded 90 percent." },
+        startsAt: "2026-10-20T00:00:00.000Z",
+      }],
+    };
+    const deliver = (token: string, organizationId: string, sourceId: string) => receiveMonitoringWebhook(
+      new Request("https://app.example.test/api/webhooks/monitoring", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      }),
+      { params: Promise.resolve({ organizationId, sourceId }) },
+    );
+
+    const firstDelivery = await deliver(monitoringWebhookTokenA, organizationAId, monitoringSourceAId);
+    const duplicateDelivery = await deliver(monitoringWebhookTokenA, organizationAId, monitoringSourceAId);
+    expect(firstDelivery.status).toBe(202);
+    expect(duplicateDelivery.status).toBe(202);
+    expect(await firstDelivery.json()).toEqual({ accepted: 1 });
+    const crossTenantDelivery = await deliver(monitoringWebhookTokenA, organizationBId, monitoringSourceBId);
+    expect(crossTenantDelivery.status).toBe(401);
+
+    const persistedA = await withTenantTransaction(tenantA, (tx) => tx.alert.findMany({ where: { organizationId: organizationAId, externalId: fingerprint } }));
+    const persistedB = await withTenantTransaction(tenantB, (tx) => tx.alert.findMany({ where: { organizationId: organizationBId, externalId: fingerprint } }));
+    expect(persistedA).toHaveLength(1);
+    expect(persistedA[0]).toMatchObject({ sourceId: monitoringSourceAId, severity: "CRITICAL", status: "OPEN" });
+    expect(persistedB).toEqual([]);
+    await withTenantTransaction(tenantA, async (tx) => {
+      await tx.alert.deleteMany({ where: { organizationId: organizationAId, sourceId: monitoringSourceAId, externalId: fingerprint } });
+      await tx.subscription.deleteMany({ where: { organizationId: organizationAId, stripeSubscriptionId: `sub_webhook_${suffix}` } });
+    });
   });
 
   it("lists only records belonging to the active tenant context", async () => {

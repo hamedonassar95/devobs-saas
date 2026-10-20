@@ -2,13 +2,13 @@ import { z } from "zod";
 
 export const tenantResourceSchemas = {
   integrations: z.object({
-    provider: z.enum(["GITHUB", "GITLAB", "BITBUCKET", "OTHER"]),
+    provider: z.enum(["GITHUB", "GITLAB", "BITBUCKET"]),
     name: z.string().trim().min(1).max(120),
     repositoryUrl: z.url().max(2048),
     externalId: z.string().max(255).optional(),
   }),
   "monitoring-sources": z.object({
-    provider: z.enum(["PROMETHEUS", "DATADOG", "GRAFANA", "CLOUDWATCH", "OTHER"]),
+    provider: z.enum(["PROMETHEUS", "GRAFANA"]),
     name: z.string().trim().min(1).max(120),
     endpoint: z.url().max(2048).optional(),
   }),

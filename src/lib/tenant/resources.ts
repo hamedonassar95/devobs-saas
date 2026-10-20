@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { TenantContext } from "./access";
 import { tenantCreateData, tenantUpdateData, tenantWhere } from "./access";
+import { createMonitoringWebhookToken, hashMonitoringWebhookToken } from "@/lib/monitoring/webhook-token";
 
 export const TENANT_RESOURCES = ["integrations", "monitoring-sources", "alerts", "analysis-results"] as const;
 export type TenantResourceName = (typeof TENANT_RESOURCES)[number];
@@ -46,6 +47,21 @@ export async function createTenantResource(client: Prisma.TransactionClient, ten
     case "analysis-results":
       return client.analysisResult.create({ data: tenantCreateData(tenant.organizationId, input) as Prisma.AnalysisResultUncheckedCreateInput });
   }
+}
+
+export async function createTenantMonitoringSource(client: Prisma.TransactionClient, tenant: TenantContext, input: Record<string, unknown>) {
+  const webhookToken = createMonitoringWebhookToken();
+  const item = await client.monitoringSource.create({
+    data: tenantCreateData(tenant.organizationId, input) as Prisma.MonitoringSourceUncheckedCreateInput,
+  });
+  await client.monitoringWebhookCredential.create({
+    data: {
+      organizationId: tenant.organizationId,
+      sourceId: item.id,
+      tokenHash: hashMonitoringWebhookToken(webhookToken),
+    },
+  });
+  return { item, webhookToken };
 }
 
 export async function updateTenantResource(client: Prisma.TransactionClient, tenant: TenantContext, resource: TenantResourceName, id: string, input: Record<string, unknown>) {
