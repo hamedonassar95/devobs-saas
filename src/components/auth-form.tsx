@@ -14,19 +14,24 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     setError("");
     const form = new FormData(event.currentTarget);
     const body = Object.fromEntries(form.entries());
-    const response = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const result = await response.json();
-    if (!response.ok) {
-      setError(result.error ?? "Unable to sign in.");
+    try {
+      const response = await fetch(`/api/auth/${mode}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result: { error?: string } = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(result.error ?? "Unable to sign in.");
+        return;
+      }
+      router.replace(mode === "register" ? "/billing" : "/");
+      router.refresh();
+    } catch {
+      setError("Unable to connect. Check your connection and try again.");
+    } finally {
       setBusy(false);
-      return;
     }
-    router.replace(mode === "register" ? "/billing" : "/");
-    router.refresh();
   }
 
   return (

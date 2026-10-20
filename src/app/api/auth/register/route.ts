@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { registrationSchema } from "@/lib/auth/schemas";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { consumeAuthAttempt, resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { prisma } from "@/lib/db";
 
 function createSlug(name: string): string {
@@ -16,6 +17,14 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid registration details." }, { status: 400 });
 
   const email = parsed.data.email.trim().toLowerCase();
+  const limit = await consumeAuthAttempt("register", email);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many registration attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
+  }
+
   const passwordHash = await hashPassword(parsed.data.password);
   try {
     const user = await prisma.$transaction(async (tx) => {
@@ -32,6 +41,7 @@ export async function POST(request: Request) {
       });
       return createdUser;
     });
+    await resetAuthAttempts("register", email);
     await createSession(user.id);
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {
