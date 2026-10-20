@@ -3,7 +3,7 @@ import { ContactForm } from "@/components/contact-form";
 import { PLAN_CATALOG, type BillingPlan } from "@/lib/billing/plans";
 import { getMarketingPrices } from "@/lib/billing/marketing-prices";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 const planHighlights: Record<BillingPlan, string[]> = {
   MONITORING: [

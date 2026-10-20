@@ -1,9 +1,7 @@
 name: Deploy to Google Cloud Run
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -15,7 +13,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != '' }}
     runs-on: ubuntu-latest
     env:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -24,6 +21,10 @@ jobs:
       GCP_CLOUD_RUN_SERVICE: ${{ vars.GCP_CLOUD_RUN_SERVICE }}
       GCP_RUNTIME_SERVICE_ACCOUNT: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
       GCP_CLOUD_SQL_INSTANCE: ${{ vars.GCP_CLOUD_SQL_INSTANCE }}
+      GCP_DATABASE_URL_SECRET_VERSION: ${{ vars.GCP_DATABASE_URL_SECRET_VERSION }}
+      GCP_STRIPE_SECRET_KEY_SECRET_VERSION: ${{ vars.GCP_STRIPE_SECRET_KEY_SECRET_VERSION }}
+      GCP_STRIPE_WEBHOOK_SECRET_VERSION: ${{ vars.GCP_STRIPE_WEBHOOK_SECRET_VERSION }}
+      GCP_RESEND_API_KEY_SECRET_VERSION: ${{ vars.GCP_RESEND_API_KEY_SECRET_VERSION }}
       APP_URL: ${{ vars.APP_URL }}
       STRIPE_PRICE_MONITORING: ${{ vars.STRIPE_PRICE_MONITORING }}
       STRIPE_PRICE_CICD: ${{ vars.STRIPE_PRICE_CICD }}
@@ -34,16 +35,23 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
-        with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+      - name: Skip stale main revisions
+        id: current
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_sha="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          if [[ "$DEPLOY_SHA" != "$main_sha" ]]; then
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Main has advanced since this CI run; production deployment skipped." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "should_deploy=true" >> "$GITHUB_OUTPUT"
 
       - name: Validate deployment configuration
+        if: steps.current.outputs.should_deploy == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -52,20 +60,48 @@ jobs:
           : "${GCP_ARTIFACT_REPOSITORY:?Set the GCP_ARTIFACT_REPOSITORY repository variable}"
           : "${GCP_CLOUD_RUN_SERVICE:?Set the GCP_CLOUD_RUN_SERVICE repository variable}"
           : "${GCP_RUNTIME_SERVICE_ACCOUNT:?Set the GCP_RUNTIME_SERVICE_ACCOUNT repository variable}"
+          : "${GCP_WORKLOAD_IDENTITY_PROVIDER:?Set the GCP_WORKLOAD_IDENTITY_PROVIDER repository variable}"
+          : "${GCP_DEPLOY_SERVICE_ACCOUNT:?Set the GCP_DEPLOY_SERVICE_ACCOUNT repository variable}"
+          : "${GCP_DATABASE_URL_SECRET_VERSION:?Set the GCP_DATABASE_URL_SECRET_VERSION repository variable}"
+          : "${GCP_STRIPE_SECRET_KEY_SECRET_VERSION:?Set the GCP_STRIPE_SECRET_KEY_SECRET_VERSION repository variable}"
+          : "${GCP_STRIPE_WEBHOOK_SECRET_VERSION:?Set the GCP_STRIPE_WEBHOOK_SECRET_VERSION repository variable}"
+          : "${GCP_RESEND_API_KEY_SECRET_VERSION:?Set the GCP_RESEND_API_KEY_SECRET_VERSION repository variable}"
           : "${APP_URL:?Set APP_URL to the canonical HTTPS application URL}"
           : "${STRIPE_PRICE_MONITORING:?Set STRIPE_PRICE_MONITORING}"
           : "${STRIPE_PRICE_CICD:?Set STRIPE_PRICE_CICD}"
           : "${STRIPE_PRICE_FULL:?Set STRIPE_PRICE_FULL}"
           : "${CONTACT_EMAIL:?Set CONTACT_EMAIL}"
           : "${CONTACT_FROM_EMAIL:?Set CONTACT_FROM_EMAIL}"
+          for version in \
+            "$GCP_DATABASE_URL_SECRET_VERSION" \
+            "$GCP_STRIPE_SECRET_KEY_SECRET_VERSION" \
+            "$GCP_STRIPE_WEBHOOK_SECRET_VERSION" \
+            "$GCP_RESEND_API_KEY_SECRET_VERSION"; do
+            [[ "$version" =~ ^[1-9][0-9]*$ ]] || {
+              echo "Secret versions must be positive numeric Secret Manager version numbers." >&2
+              exit 1
+            }
+          done
           case "$APP_URL" in https://*) ;; *) echo "APP_URL must use HTTPS" >&2; exit 1 ;; esac
 
+      - name: Authenticate to Google Cloud
+        if: steps.current.outputs.should_deploy == 'true'
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        if: steps.current.outputs.should_deploy == 'true'
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
       - name: Build and push immutable image
+        if: steps.current.outputs.should_deploy == 'true'
         id: image
         shell: bash
         run: |
           set -euo pipefail
-          gcloud config set project "$GCP_PROJECT_ID"
+          gcloud config set project "$GCP_PROJECT_ID" --quiet
           gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
           image="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/${GCP_CLOUD_RUN_SERVICE}:${GITHUB_SHA}"
           migration_image="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/${GCP_CLOUD_RUN_SERVICE}:migrate-${GITHUB_SHA}"
@@ -77,6 +113,7 @@ jobs:
           echo "migration=$migration_image" >> "$GITHUB_OUTPUT"
 
       - name: Run database migrations
+        if: steps.current.outputs.should_deploy == 'true'
         shell: bash
         env:
           IMAGE: ${{ steps.image.outputs.migration }}
@@ -91,9 +128,10 @@ jobs:
             --region "$GCP_REGION" \
             --image "$IMAGE" \
             --service-account "$GCP_RUNTIME_SERVICE_ACCOUNT" \
-            --set-secrets DATABASE_URL=devobs-database-url:latest \
+            --set-secrets "DATABASE_URL=devobs-database-url:${GCP_DATABASE_URL_SECRET_VERSION}" \
             --max-retries 1 \
             --task-timeout 10m \
+            --quiet \
             "${cloud_sql_args[@]}"
           gcloud run jobs execute "${GCP_CLOUD_RUN_SERVICE}-migrate" \
             --project "$GCP_PROJECT_ID" \
@@ -101,6 +139,7 @@ jobs:
             --wait
 
       - name: Deploy application revision
+        if: steps.current.outputs.should_deploy == 'true'
         shell: bash
         env:
           IMAGE: ${{ steps.image.outputs.name }}
@@ -110,6 +149,7 @@ jobs:
           if [[ -n "${GCP_CLOUD_SQL_INSTANCE:-}" ]]; then
             cloud_sql_args+=(--set-cloudsql-instances "$GCP_CLOUD_SQL_INSTANCE")
           fi
+          candidate_tag="candidate-${GITHUB_SHA:0:12}"
           gcloud run deploy "$GCP_CLOUD_RUN_SERVICE" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
@@ -124,14 +164,49 @@ jobs:
             --max 10 \
             --concurrency 40 \
             --timeout 60 \
+            --no-traffic \
+            --tag "$candidate_tag" \
             --set-env-vars "APP_URL=${APP_URL},STRIPE_PRICE_MONITORING=${STRIPE_PRICE_MONITORING},STRIPE_PRICE_CICD=${STRIPE_PRICE_CICD},STRIPE_PRICE_FULL=${STRIPE_PRICE_FULL},CONTACT_EMAIL=${CONTACT_EMAIL},CONTACT_FROM_EMAIL=${CONTACT_FROM_EMAIL}" \
-            --set-secrets "DATABASE_URL=devobs-database-url:latest,STRIPE_SECRET_KEY=devobs-stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=devobs-stripe-webhook-secret:latest,RESEND_API_KEY=devobs-resend-api-key:latest" \
+            --set-secrets "DATABASE_URL=devobs-database-url:${GCP_DATABASE_URL_SECRET_VERSION},STRIPE_SECRET_KEY=devobs-stripe-secret-key:${GCP_STRIPE_SECRET_KEY_SECRET_VERSION},STRIPE_WEBHOOK_SECRET=devobs-stripe-webhook-secret:${GCP_STRIPE_WEBHOOK_SECRET_VERSION},RESEND_API_KEY=devobs-resend-api-key:${GCP_RESEND_API_KEY_SECRET_VERSION}" \
+            --quiet \
             "${cloud_sql_args[@]}"
 
-      - name: Verify deployed health endpoint
+      - name: Verify candidate revision before traffic switch
+        if: steps.current.outputs.should_deploy == 'true'
         shell: bash
         run: |
           set -euo pipefail
+          candidate_tag="candidate-${GITHUB_SHA:0:12}"
+          cleanup_candidate_tag() {
+            gcloud run services update-traffic "$GCP_CLOUD_RUN_SERVICE" \
+              --project "$GCP_PROJECT_ID" \
+              --region "$GCP_REGION" \
+              --remove-tags "$candidate_tag" \
+              --quiet || true
+          }
+          trap cleanup_candidate_tag EXIT
+          revision="$(gcloud run services describe "$GCP_CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --format='value(status.latestCreatedRevisionName)')"
+          candidate_url="$(gcloud run services describe "$GCP_CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --format=json | jq -er --arg tag "$candidate_tag" '.status.traffic[] | select(.tag == $tag) | .url')"
+          echo "Smoke-testing revision $revision at its tagged URL."
+          curl --fail --show-error --silent \
+            --retry 10 --retry-delay 6 --retry-connrefused \
+            "${candidate_url}/api/health"
+          main_sha="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          if [[ "$GITHUB_SHA" != "$main_sha" ]]; then
+            echo "Main advanced during deployment; candidate remains off production traffic." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gcloud run services update-traffic "$GCP_CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --to-revisions "${revision}=100" \
+            --quiet
           service_url="$(gcloud run services describe "$GCP_CLOUD_RUN_SERVICE" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \

@@ -23,6 +23,20 @@ locals {
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "sqladmin.googleapis.com",
+    "sts.googleapis.com",
+  ])
+
+  direct_domain_mapping_regions = toset([
+    "asia-east1",
+    "asia-northeast1",
+    "asia-southeast1",
+    "europe-north1",
+    "europe-west1",
+    "europe-west4",
+    "us-central1",
+    "us-east1",
+    "us-east4",
+    "us-west1",
   ])
 
   secret_ids = {
@@ -110,11 +124,12 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_provider_id = "github"
   display_name                       = "GitHub Actions OIDC"
   attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.repository" = "assertion.repository"
-    "attribute.ref"        = "assertion.ref"
+    "google.subject"                = "assertion.sub"
+    "attribute.repository_id"       = "assertion.repository_id"
+    "attribute.repository_owner_id" = "assertion.repository_owner_id"
+    "attribute.ref"                 = "assertion.ref"
   }
-  attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main'"
+  attribute_condition = "assertion.repository_id == '${var.github_repository_id}' && assertion.repository_owner_id == '${var.github_repository_owner_id}' && assertion.ref == 'refs/heads/main'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -124,7 +139,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 resource "google_service_account_iam_member" "github_deployer" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository_id/${var.github_repository_id}"
 }
 
 resource "google_secret_manager_secret" "app" {
@@ -163,6 +178,13 @@ resource "google_cloud_run_domain_mapping" "app" {
     route_name = var.service_name
   }
 
+  lifecycle {
+    precondition {
+      condition     = contains(local.direct_domain_mapping_regions, var.region)
+      error_message = "Cloud Run direct domain mappings are supported only in asia-east1, asia-northeast1, asia-southeast1, europe-north1, europe-west1, europe-west4, us-central1, us-east1, us-east4, and us-west1."
+    }
+  }
+
   depends_on = [google_project_service.required]
 }
 
@@ -192,7 +214,8 @@ resource "google_monitoring_uptime_check_config" "app" {
   monitored_resource {
     type = "uptime_url"
     labels = {
-      host = var.domain_name
+      host       = var.domain_name
+      project_id = var.project_id
     }
   }
 
@@ -214,7 +237,7 @@ resource "google_monitoring_alert_policy" "uptime" {
   conditions {
     display_name = "HTTPS health check is failing"
     condition_threshold {
-      filter          = "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\" AND resource.label.host=\"${var.domain_name}\""
+      filter          = "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\" AND resource.label.host=\"${var.domain_name}\" AND metric.label.check_id=\"${google_monitoring_uptime_check_config.app[0].uptime_check_id}\""
       duration        = "120s"
       comparison      = "COMPARISON_LT"
       threshold_value = 1

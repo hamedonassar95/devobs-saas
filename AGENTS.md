@@ -44,4 +44,5 @@ Tenant-aware foundations are implemented on `main`:
 - Phase 2 was merged into `main` in PR #1.
 - Phase 3 was merged into `main` in PR #2.
 - Phase 4 was merged into `main` in PR #3.
-- Phase 5 deployment configuration is being developed on `phase5-google-cloud`; open a PR to `main` after tests pass and do not merge without explicit user confirmation.
+- Phase 5 deployment configuration was merged into `main` in PR #4.
+- Phase 5 follow-up hardening is in progress on `phase5-postmerge-hardening`; open a PR to `main` after tests pass and do not merge without explicit user confirmation.
