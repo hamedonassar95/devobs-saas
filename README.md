@@ -22,6 +22,8 @@ Run checks with `npm test`, `npm run typecheck`, and `npm run lint`.
 
 Authentication uses email and password. Passwords are hashed; sessions use opaque random tokens whose hashes are stored in PostgreSQL and are delivered in HTTP-only cookies.
 
+Login and registration attempts are limited per normalized email in shared PostgreSQL storage (10 login attempts or 4 registration attempts per 15-minute window); successful authentication clears that email's counter. The rate-limit table stores keyed digests rather than email addresses and expires old windows opportunistically. Resource roles are enforced server-side: viewers can read, members can read/create/update, and admins or owners can also delete. Billing changes remain owner-only.
+
 Tenant-owned record operations require active organization membership, include an organization filter, and run inside a transaction that sets a transaction-local PostgreSQL RLS context. Queries without that context fail closed. Do not connect as a superuser or a role with `BYPASSRLS` in the application runtime.
 
 ## Stripe billing (Phase 3)

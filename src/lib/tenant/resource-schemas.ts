@@ -22,7 +22,13 @@ export const tenantResourceSchemas = {
   "analysis-results": z.object({
     alertId: z.string().optional(),
     summary: z.string().trim().min(1).max(10000),
-    details: z.unknown().optional(),
+    details: z.unknown().optional().refine((value) => {
+      try {
+        return Buffer.byteLength(JSON.stringify(value) ?? "", "utf8") <= 16_384;
+      } catch {
+        return false;
+      }
+    }, "Analysis details must be valid JSON no larger than 16 KiB."),
     model: z.string().max(120).optional(),
   }),
 } as const;

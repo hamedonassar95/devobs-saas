@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { MembershipStatus, Prisma, PrismaClient } from "@prisma/client";
-import { requireTenantContext, tenantCreateData, tenantWhere, withTenantTransaction } from "./access";
+import { MembershipRole, MembershipStatus, Prisma, PrismaClient } from "@prisma/client";
+import { requireTenantContext, requireTenantContextForPermission, TenantPermissionError, tenantCreateData, tenantWhere, withTenantTransaction } from "./access";
 import { createTenantResource, deleteTenantResource, getTenantResource, listTenantResource, updateTenantResource } from "./resources";
 
 describe("tenant boundaries", () => {
@@ -23,6 +23,29 @@ describe("tenant boundaries", () => {
     await expect(requireTenantContext("user-a", "org-a", client)).resolves.toEqual({
       userId: "user-a",
       organizationId: "org-a",
+    });
+  });
+
+  it("applies the organization role matrix to resource permissions", async () => {
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce({ role: MembershipRole.VIEWER })
+      .mockResolvedValueOnce({ role: MembershipRole.MEMBER })
+      .mockResolvedValueOnce({ role: MembershipRole.MEMBER })
+      .mockResolvedValueOnce({ role: MembershipRole.ADMIN });
+    const client = { membership: { findFirst } } as unknown as PrismaClient;
+
+    await expect(requireTenantContextForPermission("viewer", "org-a", "write", client))
+      .rejects.toBeInstanceOf(TenantPermissionError);
+    await expect(requireTenantContextForPermission("member", "org-a", "write", client))
+      .resolves.toEqual({ userId: "member", organizationId: "org-a" });
+    await expect(requireTenantContextForPermission("member", "org-a", "delete", client))
+      .rejects.toBeInstanceOf(TenantPermissionError);
+    await expect(requireTenantContextForPermission("admin", "org-a", "delete", client))
+      .resolves.toEqual({ userId: "admin", organizationId: "org-a" });
+    expect(findFirst).toHaveBeenCalledTimes(4);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { userId: "viewer", organizationId: "org-a", status: MembershipStatus.ACTIVE },
+      select: { role: true },
     });
   });
 

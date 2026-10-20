@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
-import { requireTenantContext, withTenantTransaction, type TenantContext } from "@/lib/tenant/access";
+import { requireTenantContext, requireTenantContextForPermission, TenantPermissionError, withTenantTransaction, type TenantContext } from "@/lib/tenant/access";
 import { createTenantResource, deleteTenantResource, getTenantResource, listTenantResource, updateTenantResource } from "@/lib/tenant/resources";
 import { PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { applyStripeSubscriptionSnapshot } from "@/lib/billing/stripe-events";
+import { consumeAuthAttempt, resetAuthAttempts } from "@/lib/auth/rate-limit";
 
 const suffix = randomUUID();
 let organizationAId = "";
@@ -113,6 +114,29 @@ describe("PostgreSQL tenant isolation policies", () => {
     ]);
     expect(alertsA.map((alert) => alert.id)).toEqual([alertAId]);
     expect(alertsB.map((alert) => alert.id)).toEqual([alertBId]);
+  });
+
+  it("enforces active membership roles for resource writes", async () => {
+    await prisma.membership.create({
+      data: { organizationId: organizationAId, userId: userBId, role: "VIEWER", status: "ACTIVE" },
+    });
+    await expect(requireTenantContextForPermission(userBId, organizationAId, "write"))
+      .rejects.toBeInstanceOf(TenantPermissionError);
+    await expect(requireTenantContextForPermission(userBId, organizationAId, "read"))
+      .resolves.toEqual({ userId: userBId, organizationId: organizationAId });
+  });
+
+  it("throttles repeated authentication attempts in shared PostgreSQL storage", async () => {
+    const email = `auth-limit-${suffix}@example.test`;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await expect(consumeAuthAttempt("login", email)).resolves.toMatchObject({ allowed: true });
+    }
+    const blocked = await consumeAuthAttempt("login", email);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.retryAfterSeconds).toBeGreaterThan(0);
+    await resetAuthAttempts("login", email);
+    await expect(consumeAuthAttempt("login", email)).resolves.toMatchObject({ allowed: true });
+    await resetAuthAttempts("login", email);
   });
 
   it("blocks cross-tenant reads, updates, and deletes", async () => {

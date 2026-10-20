@@ -34,6 +34,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+      - name: Validate Terraform configuration
+        run: |
+          terraform -chdir=infra/terraform fmt -check -recursive
+          terraform -chdir=infra/terraform init -backend=false -lockfile=readonly -input=false
+          terraform -chdir=infra/terraform validate
       - run: npm ci
       - run: npx prisma generate
       - run: npm run lint

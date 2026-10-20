@@ -130,6 +130,16 @@ model Session {
   @@map("sessions")
 }
 
+model AuthAttemptLimit {
+  keyHash         String   @id
+  attempts        Int
+  windowStartedAt DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([windowStartedAt])
+  @@map("auth_attempt_limits")
+}
+
 model CiCdIntegration {
   id             String         @id @default(cuid())
   organizationId String

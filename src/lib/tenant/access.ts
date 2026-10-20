@@ -1,10 +1,26 @@
-import { MembershipStatus, Prisma, PrismaClient } from "@prisma/client";
+import { MembershipRole, MembershipStatus, Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
+
+export type TenantPermission = "read" | "write" | "delete";
+
+const rolePermissions: Record<MembershipRole, readonly TenantPermission[]> = {
+  OWNER: ["read", "write", "delete"],
+  ADMIN: ["read", "write", "delete"],
+  MEMBER: ["read", "write"],
+  VIEWER: ["read"],
+};
 
 export class TenantAccessError extends Error {
   constructor() {
     super("Organization not found");
     this.name = "TenantAccessError";
+  }
+}
+
+export class TenantPermissionError extends Error {
+  constructor() {
+    super("Insufficient organization permissions");
+    this.name = "TenantPermissionError";
   }
 }
 
@@ -24,6 +40,22 @@ export async function requireTenantContext(
     select: { id: true },
   });
   if (!membership) throw new TenantAccessError();
+  return { userId, organizationId };
+}
+
+export async function requireTenantContextForPermission(
+  userId: string | null,
+  organizationId: string,
+  permission: TenantPermission,
+  client: PrismaClient = prisma,
+): Promise<TenantContext> {
+  if (!userId || !organizationId) throw new TenantAccessError();
+  const membership = await client.membership.findFirst({
+    where: { userId, organizationId, status: MembershipStatus.ACTIVE },
+    select: { role: true },
+  });
+  if (!membership) throw new TenantAccessError();
+  if (!rolePermissions[membership.role].includes(permission)) throw new TenantPermissionError();
   return { userId, organizationId };
 }
 
