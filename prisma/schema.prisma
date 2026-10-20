@@ -233,15 +233,19 @@ model AnalysisResult {
 }
 
 model AiAnalysisUsageDaily {
-  organizationId String
-  day            DateTime     @db.Date
-  requests       Int          @default(0)
-  succeeded      Int          @default(0)
-  failed         Int          @default(0)
-  totalLatencyMs Int          @default(0)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId       String
+  day                  DateTime     @db.Date
+  requests             Int          @default(0)
+  succeeded            Int          @default(0)
+  failed               Int          @default(0)
+  totalLatencyMs       Int          @default(0)
+  inputTokens          Int          @default(0)
+  outputTokens         Int          @default(0)
+  usageReports         Int          @default(0)
+  estimatedCostNanoUsd BigInt       @default(0)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@id([organizationId, day])
   @@map("ai_analysis_usage_daily")
@@ -249,13 +253,17 @@ model AiAnalysisUsageDaily {
 
 // This aggregate contains no tenant identifiers or prompts; it protects the shared provider request budget.
 model AiProviderUsageDaily {
-  day            DateTime @id @db.Date
-  requests       Int      @default(0)
-  succeeded      Int      @default(0)
-  failed         Int      @default(0)
-  totalLatencyMs Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  day                  DateTime @id @db.Date
+  requests             Int      @default(0)
+  succeeded            Int      @default(0)
+  failed               Int      @default(0)
+  totalLatencyMs       Int      @default(0)
+  inputTokens          Int      @default(0)
+  outputTokens         Int      @default(0)
+  usageReports         Int      @default(0)
+  estimatedCostNanoUsd BigInt   @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@map("ai_provider_usage_daily")
 }

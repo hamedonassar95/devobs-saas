@@ -29,7 +29,7 @@ function passingOutputs(): EvalOutput[] {
         note: "AI-generated advisory only. Verify evidence and have a human review before any production change.",
       },
       model: "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8",
-      providerCall: { attempted: true, outcome: "succeeded", durationMs: 12 },
+      providerCall: { attempted: true, outcome: "succeeded", durationMs: 12, tokenUsage: { promptTokens: 240, completionTokens: 42 } },
     },
   }));
 }
@@ -101,7 +101,7 @@ describe("offline SaaS alert-analysis evaluator", () => {
           note: "Generated locally from fixed rules; no AI model or external provider was called.",
         },
         model: "local-rules-fallback",
-        providerCall: { attempted: true, outcome: "failed", durationMs: 5 },
+        providerCall: { attempted: true, outcome: "failed", durationMs: 5, tokenUsage: null },
       },
     };
     const result = run(outputs, ["--require-provider"]);

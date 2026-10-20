@@ -319,12 +319,25 @@ describe("PostgreSQL tenant isolation policies", () => {
     expect(await withTenantTransaction(tenantA, (tx) => reserveAiAnalysisRequest(tx, organizationAId, day, 2, 10)))
       .toBeNull();
 
-    await withTenantTransaction(tenantA, (tx) => recordAiAnalysisOutcome(tx, organizationAId, day, "succeeded", 150));
-    await withTenantTransaction(tenantA, (tx) => recordAiAnalysisOutcome(tx, organizationAId, day, "failed", 450));
+    await withTenantTransaction(tenantA, (tx) => recordAiAnalysisOutcome(
+      tx, organizationAId, day, "succeeded", 150, { promptTokens: 240, completionTokens: 42 },
+    ));
+    await withTenantTransaction(tenantA, (tx) => recordAiAnalysisOutcome(tx, organizationAId, day, "failed", 450, null));
     const ownUsage = await withTenantTransaction(tenantA, (tx) => tx.aiAnalysisUsageDaily.findUnique({
       where: { organizationId_day: { organizationId: organizationAId, day } },
     }));
-    expect(ownUsage).toMatchObject({ requests: 2, succeeded: 1, failed: 1, totalLatencyMs: 600 });
+    expect(ownUsage).toMatchObject({
+      requests: 2,
+      succeeded: 1,
+      failed: 1,
+      totalLatencyMs: 600,
+      inputTokens: 240,
+      outputTokens: 42,
+      usageReports: 1,
+      estimatedCostNanoUsd: BigInt(48_534),
+    });
+    const sharedUsage = await withTenantTransaction(tenantA, (tx) => tx.aiProviderUsageDaily.findUnique({ where: { day } }));
+    expect(sharedUsage).toMatchObject({ inputTokens: 240, outputTokens: 42, usageReports: 1, estimatedCostNanoUsd: BigInt(48_534) });
 
     const otherUsage = await withTenantTransaction(tenantB, (tx) => tx.aiAnalysisUsageDaily.findUnique({
       where: { organizationId_day: { organizationId: organizationAId, day } },
@@ -334,8 +347,8 @@ describe("PostgreSQL tenant isolation policies", () => {
       .rejects.toThrow();
     expect(await withTenantTransaction(tenantB, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2, 3))).toBe(1);
     expect(await withTenantTransaction(tenantB, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2, 3))).toBeNull();
-    const sharedUsage = await withTenantTransaction(tenantA, (tx) => tx.aiProviderUsageDaily.findUnique({ where: { day } }));
-    expect(sharedUsage).toMatchObject({ requests: 3, succeeded: 1, failed: 1, totalLatencyMs: 600 });
+    const sharedBudgetAfterB = await withTenantTransaction(tenantA, (tx) => tx.aiProviderUsageDaily.findUnique({ where: { day } }));
+    expect(sharedBudgetAfterB).toMatchObject({ requests: 3, succeeded: 1, failed: 1, totalLatencyMs: 600 });
   });
 
   it("scopes billing rows, enforces plan features, and applies signed-event snapshots idempotently", async () => {

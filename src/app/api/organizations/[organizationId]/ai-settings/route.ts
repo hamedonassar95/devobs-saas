@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
 import { CLOUDFLARE_ANALYSIS_MODEL_ID, isCloudflareWorkersAiConfigured, isCloudflareWorkersAiFreePlanConfirmed } from "@/lib/analysis/cloudflare";
-import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, getUtcDayStart } from "@/lib/analysis/usage";
+import { CLOUDFLARE_AI_PRICING_CHECKED_ON, getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, getUtcDayStart, summarizeAiCostEstimate } from "@/lib/analysis/usage";
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { TenantAccessError, TenantPermissionError, requireTenantContextForPermission, withTenantTransaction } from "@/lib/tenant/access";
 
@@ -27,13 +27,32 @@ export async function GET(_request: Request, context: RouteContext) {
       });
       const monthUsage = await tx.aiAnalysisUsageDaily.aggregate({
         where: { organizationId: tenant.organizationId, day: { gte: monthStart, lt: nextMonthStart } },
-        _sum: { requests: true, succeeded: true, failed: true, totalLatencyMs: true },
+        _sum: {
+          requests: true,
+          succeeded: true,
+          failed: true,
+          totalLatencyMs: true,
+          inputTokens: true,
+          outputTokens: true,
+          usageReports: true,
+          estimatedCostNanoUsd: true,
+        },
       });
       return { setting, usage, monthUsage: monthUsage._sum };
     });
     if (!setting) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     const outcomes = (usage?.succeeded ?? 0) + (usage?.failed ?? 0);
     const monthlyOutcomes = (monthUsage.succeeded ?? 0) + (monthUsage.failed ?? 0);
+    const dailyCost = summarizeAiCostEstimate(
+      usage?.requests ?? 0,
+      usage?.usageReports ?? 0,
+      usage?.estimatedCostNanoUsd ?? BigInt(0),
+    );
+    const monthlyCost = summarizeAiCostEstimate(
+      monthUsage.requests ?? 0,
+      monthUsage.usageReports ?? 0,
+      monthUsage.estimatedCostNanoUsd ?? BigInt(0),
+    );
     return NextResponse.json({
       enabled: setting.aiAnalysisEnabled,
       providerAvailable: isCloudflareWorkersAiConfigured(),
@@ -47,6 +66,12 @@ export async function GET(_request: Request, context: RouteContext) {
         failed: usage?.failed ?? 0,
         outcomesPending: Math.max(0, (usage?.requests ?? 0) - outcomes),
         averageLatencyMs: outcomes ? Math.round((usage?.totalLatencyMs ?? 0) / outcomes) : null,
+        inputTokens: usage?.inputTokens ?? 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        usageReports: usage?.usageReports ?? 0,
+        ...dailyCost,
+        costEstimateNote: "Estimated from Cloudflare's published model token rates before any account free allocation; provider billing dashboard is authoritative.",
+        pricingCheckedOn: CLOUDFLARE_AI_PRICING_CHECKED_ON,
         window: "UTC day",
       },
       usageThisMonth: {
@@ -58,8 +83,12 @@ export async function GET(_request: Request, context: RouteContext) {
         failed: monthUsage.failed ?? 0,
         outcomesPending: Math.max(0, (monthUsage.requests ?? 0) - monthlyOutcomes),
         averageLatencyMs: monthlyOutcomes ? Math.round((monthUsage.totalLatencyMs ?? 0) / monthlyOutcomes) : null,
-        costEstimateUsd: null,
-        costEstimateNote: "The provider does not return per-request billing data; review the provider account's billing dashboard.",
+        inputTokens: monthUsage.inputTokens ?? 0,
+        outputTokens: monthUsage.outputTokens ?? 0,
+        usageReports: monthUsage.usageReports ?? 0,
+        ...monthlyCost,
+        costEstimateNote: "Estimated from Cloudflare's model token rates when usage is available for every reserved request; provider billing dashboard is authoritative.",
+        pricingCheckedOn: CLOUDFLARE_AI_PRICING_CHECKED_ON,
         window: "UTC calendar month",
       },
       dataHandling: "When enabled, redacted alert text and normalized severity, status, and source type are sent to Cloudflare Workers AI for analysis.",

@@ -24,7 +24,7 @@ Save candidate results privately as JSONL with one record per case. `analysis`
 must match the stored result shape returned by the SaaS analysis service:
 
 ```json
-{"case_id":"database-pool-critical","analysis":{"summary":"...","details":{"engine":"cloudflare-workers-ai","model":"cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8","severity":"CRITICAL","status":"OPEN","sourceProvider":"PROMETHEUS","likelyCause":"...","confidence":"medium","nextSteps":["..."],"note":"AI-generated advisory only. Verify evidence and have a human review before any production change."},"model":"cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8","providerCall":{"attempted":true,"outcome":"succeeded","durationMs":12}}}
+{"case_id":"database-pool-critical","analysis":{"summary":"...","details":{"engine":"cloudflare-workers-ai","model":"cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8","severity":"CRITICAL","status":"OPEN","sourceProvider":"PROMETHEUS","likelyCause":"...","confidence":"medium","nextSteps":["..."],"note":"AI-generated advisory only. Verify evidence and have a human review before any production change."},"model":"cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8","providerCall":{"attempted":true,"outcome":"succeeded","durationMs":12,"tokenUsage":{"promptTokens":240,"completionTokens":42}}}}
 ```
 
 Run the offline evaluator:

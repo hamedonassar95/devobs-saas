@@ -91,6 +91,7 @@ describe("Cloudflare Workers AI alert analysis", () => {
           confidence: "medium",
           nextSteps: ["Check pool saturation and recent deployment changes."],
         }),
+        usage: { prompt_tokens: 240, completion_tokens: 42, total_tokens: 282 },
       },
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
@@ -111,6 +112,25 @@ describe("Cloudflare Workers AI alert analysis", () => {
     expect(result.details.engine).toBe("cloudflare-workers-ai");
     expect(result.details.sourceProvider).toBe("PROMETHEUS");
     expect(result.details.nextSteps).toHaveLength(1);
+    expect(result.tokenUsage).toEqual({ promptTokens: 240, completionTokens: 42 });
+  });
+
+  it("ignores missing or malformed optional usage without rejecting a valid analysis", async () => {
+    for (const usage of [undefined, { prompt_tokens: -1, completion_tokens: 1 }, { prompt_tokens: 2, completion_tokens: 3, total_tokens: 99 }]) {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+        result: {
+          response: JSON.stringify({
+            summary: "Database connections are saturated.",
+            likelyCause: "Connection pool exhaustion.",
+            confidence: "medium",
+            nextSteps: ["Check pool saturation."],
+          }),
+          ...(usage ? { usage } : {}),
+        },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+      await expect(analyzeAlertWithCloudflare(alert, config, fetcher)).resolves.toMatchObject({ tokenUsage: null });
+    }
   });
 
   it("does not retry provider failures or accept malformed model output", async () => {

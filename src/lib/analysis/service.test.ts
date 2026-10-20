@@ -20,7 +20,7 @@ describe("alert analysis selection", () => {
     const result = await analyzeAlert(alert, false, { env: enabledEnv, fetcher });
 
     expect(result.model).toBe("local-rules-v1");
-    expect(result.providerCall).toEqual({ attempted: false, outcome: "not-used", durationMs: 0 });
+    expect(result.providerCall).toEqual({ attempted: false, outcome: "not-used", durationMs: 0, tokenUsage: null });
     expect(result.details.note).toContain("opt-in is disabled");
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -30,7 +30,7 @@ describe("alert analysis selection", () => {
     const result = await analyzeAlert(alert, true, { env: {}, fetcher });
 
     expect(result.model).toBe("local-rules-fallback");
-    expect(result.providerCall).toEqual({ attempted: false, outcome: "not-used", durationMs: 0 });
+    expect(result.providerCall).toEqual({ attempted: false, outcome: "not-used", durationMs: 0, tokenUsage: null });
     expect(result.details.note).toContain("without an external request");
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -55,6 +55,7 @@ describe("alert analysis selection", () => {
           confidence: "medium",
           nextSteps: ["Check pool saturation and recent deployment changes."],
         }),
+        usage: { prompt_tokens: 240, completion_tokens: 42, total_tokens: 282 },
       },
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
     const result = await analyzeAlert(alert, true, { env: enabledEnv, fetcher });
@@ -63,5 +64,6 @@ describe("alert analysis selection", () => {
     expect(result.providerCall.attempted).toBe(true);
     expect(result.providerCall.outcome).toBe("succeeded");
     expect(result.providerCall.durationMs).toBeGreaterThanOrEqual(0);
+    expect(result.providerCall.tokenUsage).toEqual({ promptTokens: 240, completionTokens: 42 });
   });
 });
