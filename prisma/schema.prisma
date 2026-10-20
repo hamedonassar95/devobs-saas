@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum CiCdProvider {
+  GITHUB
+  GITLAB
+  BITBUCKET
+  OTHER
+}
+
+enum MonitoringProvider {
+  PROMETHEUS
+  DATADOG
+  GRAFANA
+  CLOUDWATCH
+  OTHER
+}
+
+enum ResourceStatus {
+  ACTIVE
+  PAUSED
+  ERROR
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Organization {
+  id                String             @id @default(cuid())
+  name              String
+  slug              String             @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  memberships       Membership[]
+  ciCdIntegrations  CiCdIntegration[]
+  monitoringSources MonitoringSource[]
+  alerts            Alert[]
+  analysisResults   AnalysisResult[]
+
+  @@unique([id, slug])
+  @@map("organizations")
+}
+
+model User {
+  id              String       @id @default(cuid())
+  email           String       @unique
+  name            String?
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  memberships     Membership[]
+  sessions        Session[]
+
+  @@map("users")
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MembershipRole   @default(MEMBER)
+  status         MembershipStatus @default(INVITED)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId, status])
+  @@map("memberships")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+model CiCdIntegration {
+  id             String         @id @default(cuid())
+  organizationId String
+  provider       CiCdProvider
+  name           String
+  repositoryUrl  String
+  externalId     String?
+  status         ResourceStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, provider, repositoryUrl])
+  @@index([organizationId, status])
+  @@map("cicd_integrations")
+}
+
+model MonitoringSource {
+  id             String             @id @default(cuid())
+  organizationId String
+  provider       MonitoringProvider
+  name           String
+  endpoint       String?
+  status         ResourceStatus     @default(ACTIVE)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alerts         Alert[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, provider, name])
+  @@index([organizationId, status])
+  @@map("monitoring_sources")
+}
+
+model Alert {
+  id              String            @id @default(cuid())
+  organizationId  String
+  sourceId        String?
+  title           String
+  description     String?
+  severity        AlertSeverity
+  status          AlertStatus       @default(OPEN)
+  openedAt        DateTime          @default(now())
+  resolvedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source          MonitoringSource? @relation(fields: [organizationId, sourceId], references: [organizationId, id], onDelete: Restrict)
+  analysisResults AnalysisResult[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, severity])
+  @@index([organizationId, sourceId])
+  @@map("alerts")
+}
+
+model AnalysisResult {
+  id             String       @id @default(cuid())
+  organizationId String
+  alertId        String?
+  summary        String
+  details        Json?
+  model          String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alert          Alert?       @relation(fields: [organizationId, alertId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, alertId])
+  @@map("analysis_results")
+}

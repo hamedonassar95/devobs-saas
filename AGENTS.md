@@ -26,5 +26,5 @@ Do not implement billing, pricing, the marketing landing page, or cloud deployme
 - Mark material assumptions clearly and ask before choosing an authentication provider or other consequential product behavior not specified by the user.
 
 ## Current repository state
-- The repository was initialized with an empty `README.md`.
-- The approved plan is to add the application and data models only after the user is told that this file is in place and confirms continuation.
+- Phase 2 implementation is in progress on `phase2-multitenancy` after the user confirmed the repository and this file were in place.
+- Keep all application changes on this branch; `main` is only the starting point for the eventual pull request.
