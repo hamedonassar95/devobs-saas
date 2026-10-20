@@ -8,6 +8,8 @@ export default function HomePage() {
       <Link href="/login">Sign in</Link>
       {" · "}
       <Link href="/register">Create an account</Link>
+      {" · "}
+      <Link href="/billing">Billing</Link>
     </main>
   );
 }

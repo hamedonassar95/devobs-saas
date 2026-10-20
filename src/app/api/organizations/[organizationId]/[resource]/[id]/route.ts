@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
+import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { requireTenantContext, TenantAccessError, withTenantTransaction } from "@/lib/tenant/access";
 import { deleteTenantResource, getTenantResource, isTenantResource, updateTenantResource } from "@/lib/tenant/resources";
 import { tenantResourceSchemas } from "@/lib/tenant/resource-schemas";
@@ -15,10 +16,14 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!isTenantResource(resource)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
     const tenant = await requireTenantContext(await getAuthenticatedUserId(), organizationId);
-    const item = await withTenantTransaction(tenant, (tx) => getTenantResource(tx, tenant, resource, id));
+    const item = await withTenantTransaction(tenant, async (tx) => {
+      await requirePlanFeature(tx, tenant.organizationId, featureForResource(resource));
+      return getTenantResource(tx, tenant, resource, id);
+    });
     return item ? NextResponse.json({ item }) : NextResponse.json({ error: "Not found" }, { status: 404 });
   } catch (error) {
     if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404 });
+    if (error instanceof PlanAccessError) return NextResponse.json({ error: error.message, code: "SUBSCRIPTION_REQUIRED" }, { status: 402 });
     throw error;
   }
 }
@@ -30,10 +35,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!parsed.success || Object.keys(parsed.data ?? {}).length === 0) return NextResponse.json({ error: "Invalid resource data." }, { status: 400 });
   try {
     const tenant = await requireTenantContext(await getAuthenticatedUserId(), organizationId);
-    const result = await withTenantTransaction(tenant, (tx) => updateTenantResource(tx, tenant, resource, id, parsed.data as Record<string, unknown>));
+    const result = await withTenantTransaction(tenant, async (tx) => {
+      await requirePlanFeature(tx, tenant.organizationId, featureForResource(resource));
+      return updateTenantResource(tx, tenant, resource, id, parsed.data as Record<string, unknown>);
+    });
     return result.count ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Not found" }, { status: 404 });
   } catch (error) {
     if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404 });
+    if (error instanceof PlanAccessError) return NextResponse.json({ error: error.message, code: "SUBSCRIPTION_REQUIRED" }, { status: 402 });
     throw error;
   }
 }
@@ -43,10 +52,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
   if (!isTenantResource(resource)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
     const tenant = await requireTenantContext(await getAuthenticatedUserId(), organizationId);
-    const result = await withTenantTransaction(tenant, (tx) => deleteTenantResource(tx, tenant, resource, id));
+    const result = await withTenantTransaction(tenant, async (tx) => {
+      await requirePlanFeature(tx, tenant.organizationId, featureForResource(resource));
+      return deleteTenantResource(tx, tenant, resource, id);
+    });
     return result.count ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Not found" }, { status: 404 });
   } catch (error) {
     if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404 });
+    if (error instanceof PlanAccessError) return NextResponse.json({ error: error.message, code: "SUBSCRIPTION_REQUIRED" }, { status: 402 });
     throw error;
   }
 }

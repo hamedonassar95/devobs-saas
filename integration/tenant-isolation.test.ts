@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { requireTenantContext, withTenantTransaction, type TenantContext } from "@/lib/tenant/access";
 import { createTenantResource, deleteTenantResource, getTenantResource, listTenantResource, updateTenantResource } from "@/lib/tenant/resources";
+import { PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
+import { applyStripeSubscriptionSnapshot } from "@/lib/billing/stripe-events";
 
 const suffix = randomUUID();
 let organizationAId = "";
@@ -19,6 +21,7 @@ let monitoringSourceAId = "";
 let monitoringSourceBId = "";
 let analysisAId = "";
 let analysisBId = "";
+const stripeEventIds: string[] = [];
 
 describe("PostgreSQL tenant isolation policies", () => {
   beforeAll(async () => {
@@ -84,8 +87,10 @@ describe("PostgreSQL tenant isolation policies", () => {
         await tx.alert.deleteMany({ where: { organizationId: tenant.organizationId } });
         await tx.monitoringSource.deleteMany({ where: { organizationId: tenant.organizationId } });
         await tx.ciCdIntegration.deleteMany({ where: { organizationId: tenant.organizationId } });
+        await tx.subscription.deleteMany({ where: { organizationId: tenant.organizationId } });
       });
     }
+    if (stripeEventIds.length) await prisma.processedStripeEvent.deleteMany({ where: { id: { in: stripeEventIds } } });
     if (organizationAId || organizationBId) {
       await prisma.organization.deleteMany({ where: { id: { in: [organizationAId, organizationBId].filter(Boolean) } } });
     }
@@ -151,5 +156,88 @@ describe("PostgreSQL tenant isolation policies", () => {
       [[integrationAId], [monitoringSourceAId], [alertAId], [analysisAId]],
       [[integrationBId], [monitoringSourceBId], [alertBId], [analysisBId]],
     ]);
+  });
+
+  it("scopes billing rows, enforces plan features, and applies signed-event snapshots idempotently", async () => {
+    const trialStartedAt = new Date("2026-10-20T00:00:00.000Z");
+    const trialEndsAt = new Date("2026-11-03T00:00:00.000Z");
+    const firstEventId = `evt_trial_${suffix}`;
+    const first = {
+      eventId: firstEventId,
+      eventType: "customer.subscription.created",
+      eventCreatedAt: 1_000,
+      organizationId: organizationAId,
+      stripeCustomerId: `cus_a_${suffix}`,
+      stripeSubscriptionId: `sub_a_${suffix}`,
+      plan: "MONITORING" as const,
+      status: "TRIALING" as const,
+      trialStartedAt,
+      trialEndsAt,
+      currentPeriodEnd: trialEndsAt,
+      cancelAtPeriodEnd: false,
+    };
+    stripeEventIds.push(firstEventId, `evt_stale_${suffix}`, `evt_schedule_cancel_${suffix}`, `evt_cancel_${suffix}`);
+    expect(await applyStripeSubscriptionSnapshot(first)).toBe("applied");
+    expect(await applyStripeSubscriptionSnapshot(first)).toBe("duplicate");
+
+    const visible = await withTenantTransaction(tenantA, (tx) => tx.subscription.findMany({ where: { organizationId: organizationAId } }));
+    expect(visible).toHaveLength(1);
+    expect(await prisma.subscription.findMany({ where: { organizationId: organizationAId } })).toEqual([]);
+    await expect(prisma.subscription.create({
+      data: {
+        organizationId: organizationAId,
+        stripeSubscriptionId: `sub_no_context_${suffix}`,
+        plan: "FULL",
+        status: "ACTIVE",
+      },
+    })).rejects.toThrow();
+    const secondTenantEventId = `evt_tenant_b_${suffix}`;
+    stripeEventIds.push(secondTenantEventId);
+    expect(await applyStripeSubscriptionSnapshot({
+      ...first,
+      eventId: secondTenantEventId,
+      eventType: "customer.subscription.created",
+      organizationId: organizationBId,
+      stripeCustomerId: `cus_b_${suffix}`,
+      stripeSubscriptionId: `sub_b_${suffix}`,
+      plan: "FULL",
+      status: "ACTIVE",
+      trialStartedAt: null,
+      trialEndsAt: null,
+    })).toBe("applied");
+    expect(await withTenantTransaction(tenantA, (tx) => tx.subscription.findMany({ where: { organizationId: organizationBId } }))).toEqual([]);
+    expect(await withTenantTransaction(tenantB, (tx) => tx.subscription.findMany({ where: { organizationId: organizationBId } }))).toHaveLength(1);
+    await expect(withTenantTransaction(tenantA, (tx) => requirePlanFeature(tx, organizationAId, "monitoring"))).resolves.toBeUndefined();
+    await expect(withTenantTransaction(tenantA, (tx) => requirePlanFeature(tx, organizationAId, "cicd"))).rejects.toBeInstanceOf(PlanAccessError);
+
+    expect(await applyStripeSubscriptionSnapshot({
+      ...first,
+      eventId: `evt_stale_${suffix}`,
+      eventType: "customer.subscription.deleted",
+      eventCreatedAt: 999,
+      status: "CANCELED",
+    })).toBe("stale");
+    expect(await applyStripeSubscriptionSnapshot({
+      ...first,
+      eventId: `evt_schedule_cancel_${suffix}`,
+      eventType: "customer.subscription.updated",
+      eventCreatedAt: 1_001,
+      status: "ACTIVE",
+      trialStartedAt: null,
+      trialEndsAt: null,
+      cancelAtPeriodEnd: true,
+    })).toBe("applied");
+    await expect(withTenantTransaction(tenantA, (tx) => requirePlanFeature(tx, organizationAId, "monitoring"))).resolves.toBeUndefined();
+    expect(await applyStripeSubscriptionSnapshot({
+      ...first,
+      eventId: `evt_cancel_${suffix}`,
+      eventType: "customer.subscription.deleted",
+      eventCreatedAt: 1_002,
+      status: "CANCELED",
+      trialStartedAt: null,
+      trialEndsAt: null,
+      cancelAtPeriodEnd: false,
+    })).toBe("applied");
+    await expect(withTenantTransaction(tenantA, (tx) => requirePlanFeature(tx, organizationAId, "monitoring"))).rejects.toBeInstanceOf(PlanAccessError);
   });
 });
