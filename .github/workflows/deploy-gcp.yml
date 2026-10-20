@@ -35,6 +35,8 @@ jobs:
       CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
       CONTACT_FROM_EMAIL: ${{ vars.CONTACT_FROM_EMAIL }}
       CLOUDFLARE_WORKERS_AI_ENABLED: ${{ vars.CLOUDFLARE_WORKERS_AI_ENABLED }}
+      CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED: ${{ vars.CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED }}
+      CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG: ${{ vars.CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Check out source
@@ -77,7 +79,16 @@ jobs:
           : "${STRIPE_PRICE_FULL:?Set STRIPE_PRICE_FULL}"
           : "${CONTACT_EMAIL:?Set CONTACT_EMAIL}"
           : "${CONTACT_FROM_EMAIL:?Set CONTACT_FROM_EMAIL}"
+          daily_limit="${CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG:-5}"
+          [[ "$daily_limit" =~ ^([1-9]|[1-9][0-9]|100)$ ]] || {
+            echo "CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG must be an integer from 1 to 100." >&2
+            exit 1
+          }
           if [[ "${CLOUDFLARE_WORKERS_AI_ENABLED:-false}" == "true" ]]; then
+            [[ "${CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED:-false}" == "true" ]] || {
+              echo "Verify the account is on Cloudflare Workers Free and set CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED=true before enabling AI." >&2
+              exit 1
+            }
             : "${CLOUDFLARE_ACCOUNT_ID:?Set CLOUDFLARE_ACCOUNT_ID for Workers AI}"
             : "${GCP_CLOUDFLARE_API_TOKEN_SECRET_VERSION:?Set the Cloudflare API token secret version}"
             [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[a-fA-F0-9]{32}$ ]] || {
@@ -90,6 +101,10 @@ jobs:
             }
           elif [[ -n "${CLOUDFLARE_WORKERS_AI_ENABLED:-}" && "$CLOUDFLARE_WORKERS_AI_ENABLED" != "false" ]]; then
             echo "CLOUDFLARE_WORKERS_AI_ENABLED must be true or false." >&2
+            exit 1
+          fi
+          if [[ -n "${CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED:-}" && "$CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED" != "true" && "$CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED" != "false" ]]; then
+            echo "CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED must be true or false." >&2
             exit 1
           fi
           for version in \
@@ -170,11 +185,14 @@ jobs:
             cloud_sql_args+=(--set-cloudsql-instances "$GCP_CLOUD_SQL_INSTANCE")
           fi
           candidate_tag="candidate-${GITHUB_SHA:0:12}"
-          runtime_env_vars="APP_URL=${APP_URL},STRIPE_PRICE_MONITORING=${STRIPE_PRICE_MONITORING},STRIPE_PRICE_CICD=${STRIPE_PRICE_CICD},STRIPE_PRICE_FULL=${STRIPE_PRICE_FULL},CONTACT_EMAIL=${CONTACT_EMAIL},CONTACT_FROM_EMAIL=${CONTACT_FROM_EMAIL},CLOUDFLARE_WORKERS_AI_ENABLED=false"
+          daily_limit="${CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG:-5}"
+          runtime_env_vars="APP_URL=${APP_URL},STRIPE_PRICE_MONITORING=${STRIPE_PRICE_MONITORING},STRIPE_PRICE_CICD=${STRIPE_PRICE_CICD},STRIPE_PRICE_FULL=${STRIPE_PRICE_FULL},CONTACT_EMAIL=${CONTACT_EMAIL},CONTACT_FROM_EMAIL=${CONTACT_FROM_EMAIL}"
           runtime_secrets="DATABASE_URL=devobs-database-url:${GCP_DATABASE_URL_SECRET_VERSION},STRIPE_SECRET_KEY=devobs-stripe-secret-key:${GCP_STRIPE_SECRET_KEY_SECRET_VERSION},STRIPE_WEBHOOK_SECRET=devobs-stripe-webhook-secret:${GCP_STRIPE_WEBHOOK_SECRET_VERSION},RESEND_API_KEY=devobs-resend-api-key:${GCP_RESEND_API_KEY_SECRET_VERSION}"
           if [[ "${CLOUDFLARE_WORKERS_AI_ENABLED:-false}" == "true" ]]; then
-            runtime_env_vars="${runtime_env_vars%,CLOUDFLARE_WORKERS_AI_ENABLED=false},CLOUDFLARE_WORKERS_AI_ENABLED=true,CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}"
+            runtime_env_vars="${runtime_env_vars},CLOUDFLARE_WORKERS_AI_ENABLED=true,CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED=true,CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG=${daily_limit},CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}"
             runtime_secrets="${runtime_secrets},CLOUDFLARE_API_TOKEN=devobs-cloudflare-ai-api-token:${GCP_CLOUDFLARE_API_TOKEN_SECRET_VERSION}"
+          else
+            runtime_env_vars="${runtime_env_vars},CLOUDFLARE_WORKERS_AI_ENABLED=false,CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED=false,CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG=${daily_limit}"
           fi
           gcloud run deploy "$GCP_CLOUD_RUN_SERVICE" \
             --project "$GCP_PROJECT_ID" \

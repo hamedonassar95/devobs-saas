@@ -3,6 +3,7 @@ type AlertForRuleAnalysis = {
   description: string | null;
   severity: "INFO" | "WARNING" | "CRITICAL";
   status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
+  sourceProvider?: "PROMETHEUS" | "GRAFANA" | null;
 };
 
 export type RuleBasedAnalysis = {
@@ -11,6 +12,7 @@ export type RuleBasedAnalysis = {
     engine: "local-rules-v1";
     severity: AlertForRuleAnalysis["severity"];
     status: AlertForRuleAnalysis["status"];
+    sourceProvider: NonNullable<AlertForRuleAnalysis["sourceProvider"]> | null;
     nextSteps: string[];
     note: string;
   };
@@ -51,6 +53,7 @@ export function analyzeAlertWithLocalRules(alert: AlertForRuleAnalysis): RuleBas
       engine: "local-rules-v1",
       severity: alert.severity,
       status: alert.status,
+      sourceProvider: alert.sourceProvider ?? null,
       nextSteps,
       note: "Generated locally from fixed rules. No AI model or external provider was called, and no alert data left the application.",
     },

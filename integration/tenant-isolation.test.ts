@@ -8,6 +8,7 @@ import { applyStripeSubscriptionSnapshot } from "@/lib/billing/stripe-events";
 import { consumeAuthAttempt, resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { POST as receiveMonitoringWebhook } from "@/app/api/webhooks/monitoring/[organizationId]/[sourceId]/route";
 import { createMonitoringWebhookToken, hashMonitoringWebhookToken } from "@/lib/monitoring/webhook-token";
+import { getUtcDayStart, recordAiAnalysisOutcome, reserveAiAnalysisRequest } from "@/lib/analysis/usage";
 
 const suffix = randomUUID();
 let organizationAId = "";
@@ -101,6 +102,7 @@ describe("PostgreSQL tenant isolation policies", () => {
       if (!tenant) continue;
       await withTenantTransaction(tenant, async (tx) => {
         await tx.analysisResult.deleteMany({ where: { organizationId: tenant.organizationId } });
+        await tx.aiAnalysisUsageDaily.deleteMany({ where: { organizationId: tenant.organizationId } });
         await tx.alert.deleteMany({ where: { organizationId: tenant.organizationId } });
         await tx.monitoringSource.deleteMany({ where: { organizationId: tenant.organizationId } });
         await tx.ciCdIntegration.deleteMany({ where: { organizationId: tenant.organizationId } });
@@ -278,6 +280,30 @@ describe("PostgreSQL tenant isolation policies", () => {
 
     expect(settingA?.aiAnalysisEnabled).toBe(true);
     expect(settingB?.aiAnalysisEnabled).toBe(false);
+  });
+
+  it("enforces an atomic daily AI request cap and isolates usage by organization", async () => {
+    const day = getUtcDayStart(new Date("2026-10-20T18:30:00.000Z"));
+    const reservations = await Promise.all(Array.from({ length: 8 }, () =>
+      withTenantTransaction(tenantA, (tx) => reserveAiAnalysisRequest(tx, organizationAId, day, 2))));
+    expect(reservations.filter((count) => count !== null).sort()).toEqual([1, 2]);
+    expect(reservations.filter((count) => count === null)).toHaveLength(6);
+
+    await withTenantTransaction(tenantA, (tx) => recordAiAnalysisOutcome(tx, organizationAId, day, "succeeded", 150));
+    await withTenantTransaction(tenantA, (tx) => recordAiAnalysisOutcome(tx, organizationAId, day, "failed", 450));
+    const ownUsage = await withTenantTransaction(tenantA, (tx) => tx.aiAnalysisUsageDaily.findUnique({
+      where: { organizationId_day: { organizationId: organizationAId, day } },
+    }));
+    expect(ownUsage).toMatchObject({ requests: 2, succeeded: 1, failed: 1, totalLatencyMs: 600 });
+
+    const otherUsage = await withTenantTransaction(tenantB, (tx) => tx.aiAnalysisUsageDaily.findUnique({
+      where: { organizationId_day: { organizationId: organizationAId, day } },
+    }));
+    expect(otherUsage).toBeNull();
+    await expect(withTenantTransaction(tenantA, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2)))
+      .rejects.toThrow();
+    expect(await withTenantTransaction(tenantB, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2)))
+      .toBe(1);
   });
 
   it("scopes billing rows, enforces plan features, and applies signed-event snapshots idempotently", async () => {
