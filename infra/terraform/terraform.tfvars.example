@@ -1,4 +1,4 @@
-project_id          = "replace-with-your-google-cloud-project-id"
+project_id          = "tensile-verve-352716"
 region              = "us-central1"
 artifact_repository = "devobs-saas"
 service_name        = "devobs-saas"

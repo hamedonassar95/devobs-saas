@@ -53,7 +53,7 @@ Build the production image locally with `docker build --tag devobs-saas:local .`
 - A PostgreSQL database reachable from Cloud Run. Cloud SQL is supported through its Cloud Run connector; a private-IP-only instance also needs suitable VPC networking.
 - A domain you control. Domain ownership must be verified in Google Cloud before adding the Cloud Run domain mapping.
 
-The Google Cloud project ID was not present in `AGENTS.md` when this setup was prepared. Obtain the intended project ID from the project owner; do not replace it with a guessed value.
+The target project ID is `tensile-verve-352716`, documented in the original Devobs repository. This setup provisions Devobs SaaS resources in that project under the names configured here. The project ID is known; the current state of its APIs, IAM permissions, database, quota, and domain has not been checked. Run cloud commands only in the owner's Google Cloud Shell, not in this development environment.
 
 ### 1. Prepare the Google Cloud resources
 
@@ -62,7 +62,7 @@ cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Set `project_id` in the ignored `terraform.tfvars`. Keep `domain_name` and `notification_email` empty for the first apply; the Cloud Run service must exist before Terraform can attach a domain. Then review and apply the bootstrap resources:
+The example already selects `tensile-verve-352716`. Keep `domain_name` and `notification_email` empty for the first apply; the Cloud Run service must exist before Terraform can attach a domain. Review the plan carefully before applying: Terraform creates project resources and enabling APIs can affect billing. The owner should confirm the planned changes do not conflict with existing resources. Then apply the reviewed bootstrap plan:
 
 ```sh
 terraform init
@@ -96,7 +96,7 @@ In the repository's **Settings → Secrets and variables → Actions → Variabl
 
 | Variable | Value |
 | --- | --- |
-| `GCP_PROJECT_ID` | The owner-provided project ID |
+| `GCP_PROJECT_ID` | `tensile-verve-352716` |
 | `GCP_REGION` | Terraform region, for example `us-central1` |
 | `GCP_ARTIFACT_REPOSITORY` | Terraform output `artifact_registry_repository` |
 | `GCP_CLOUD_RUN_SERVICE` | Terraform `service_name`, normally `devobs-saas` |
@@ -129,4 +129,4 @@ Finally, configure the Stripe webhook URL as `https://<domain>/api/billing/webho
 
 ### Deployment status
 
-This repository contains deployment configuration only. A Google Cloud project ID, an authenticated Google Cloud deployment context, and the production domain are required before infrastructure can be provisioned or the service can be deployed.
+This repository contains deployment configuration only. The target project ID is `tensile-verve-352716`; infrastructure provisioning and deployment still require the owner to run the Cloud Shell steps, provide a PostgreSQL connection and application secrets through the documented secret store, and configure a verified production domain for custom-domain HTTPS and uptime monitoring. The service has not been deployed from this environment.
