@@ -38,6 +38,10 @@ describe("Cloudflare Workers AI alert analysis", () => {
       ...freePlanEnvironment,
       CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_PER_ORG: "101",
     })).toBeNull();
+    expect(getCloudflareWorkersAiConfig({
+      ...freePlanEnvironment,
+      CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_TOTAL: "101",
+    })).toBeNull();
   });
 
   it("redacts credentials and email addresses before preparing provider input", () => {

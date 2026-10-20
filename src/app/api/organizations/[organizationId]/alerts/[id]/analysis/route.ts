@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { analyzeAlert } from "@/lib/analysis/service";
 import { CLOUDFLARE_ANALYSIS_MODEL_ID, getCloudflareWorkersAiConfig } from "@/lib/analysis/cloudflare";
-import { getDailyAiRequestLimit, getUtcDayStart, recordAiAnalysisOutcome, reserveAiAnalysisRequest } from "@/lib/analysis/usage";
+import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, getUtcDayStart, recordAiAnalysisOutcome, reserveAiAnalysisRequest } from "@/lib/analysis/usage";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { TenantAccessError, TenantPermissionError, requireTenantContextForPermission, withTenantTransaction } from "@/lib/tenant/access";
@@ -15,6 +15,7 @@ export async function POST(_request: Request, context: RouteContext) {
     const usageDay = getUtcDayStart();
     const aiConfig = getCloudflareWorkersAiConfig();
     const dailyLimit = getDailyAiRequestLimit();
+    const platformDailyLimit = getPlatformDailyAiRequestLimit();
     const prepared = await withTenantTransaction(tenant, async (tx) => {
       await requirePlanFeature(tx, tenant.organizationId, featureForResource("analysis-results"));
       const alert = await tx.alert.findFirst({
@@ -53,6 +54,7 @@ export async function POST(_request: Request, context: RouteContext) {
           tenant.organizationId,
           usageDay,
           dailyLimit ?? 0,
+          platformDailyLimit ?? 0,
         );
         if (reservation === null) return { ...result, aiEnabled: false, dailyLimitReached: true };
         return { ...result, usageReserved: true };
@@ -77,7 +79,7 @@ export async function POST(_request: Request, context: RouteContext) {
         model: "local-rules-daily-limit",
         details: {
           ...analysis.details,
-          note: `The organization's daily Cloudflare Workers AI request limit (${dailyLimit ?? 0}) was reached. Local deterministic guidance was returned; no provider request was made.`,
+          note: `The organization's daily or shared application Cloudflare Workers AI request limit was reached. Local deterministic guidance was returned; no provider request was made.`,
         },
       };
     }

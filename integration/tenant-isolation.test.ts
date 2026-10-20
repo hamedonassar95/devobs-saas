@@ -11,6 +11,7 @@ import { createMonitoringWebhookToken, hashMonitoringWebhookToken } from "@/lib/
 import { getUtcDayStart, recordAiAnalysisOutcome, reserveAiAnalysisRequest } from "@/lib/analysis/usage";
 
 const suffix = randomUUID();
+const aiUsageTestDay = getUtcDayStart(new Date(Date.UTC(2035, 0, 1) + (Number.parseInt(suffix.replaceAll("-", "").slice(0, 8), 16) % 3650) * 24 * 60 * 60 * 1000));
 let organizationAId = "";
 let organizationBId = "";
 let userAId = "";
@@ -109,6 +110,9 @@ describe("PostgreSQL tenant isolation policies", () => {
         await tx.subscription.deleteMany({ where: { organizationId: tenant.organizationId } });
       });
     }
+    if (tenantA) {
+      await withTenantTransaction(tenantA, (tx) => tx.aiProviderUsageDaily.deleteMany({ where: { day: aiUsageTestDay } }));
+    }
     if (stripeEventIds.length) await prisma.processedStripeEvent.deleteMany({ where: { id: { in: stripeEventIds } } });
     if (organizationAId || organizationBId) {
       await prisma.organization.deleteMany({ where: { id: { in: [organizationAId, organizationBId].filter(Boolean) } } });
@@ -124,6 +128,7 @@ describe("PostgreSQL tenant isolation policies", () => {
       data: { organizationId: organizationAId, title: "Missing context", severity: "WARNING" },
     })).rejects.toThrow();
     expect(await prisma.monitoringWebhookCredential.findMany({})).toEqual([]);
+    expect(await prisma.aiProviderUsageDaily.findMany({ where: { day: aiUsageTestDay } })).toEqual([]);
     await expect(prisma.monitoringWebhookCredential.create({
       data: { organizationId: organizationAId, sourceId: monitoringSourceAId, tokenHash: createHash("sha256").update("no-context").digest("hex") },
     })).rejects.toThrow();
@@ -216,6 +221,27 @@ describe("PostgreSQL tenant isolation policies", () => {
     await resetAuthAttempts("login", email);
   });
 
+  it("applies persistent per-email and shared daily contact submission caps", async () => {
+    const email = `contact-limit-${suffix}@example.test`;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await expect(consumeAuthAttempt("contactEmail", email)).resolves.toMatchObject({ allowed: true });
+    }
+    const perEmailBlocked = await consumeAuthAttempt("contactEmail", email);
+    expect(perEmailBlocked.allowed).toBe(false);
+    expect(perEmailBlocked.retryAfterSeconds).toBeGreaterThan(0);
+    await resetAuthAttempts("contactEmail", email);
+
+    const globalKey = `all-contact-submissions-${suffix}`;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      await expect(consumeAuthAttempt("contactGlobal", globalKey))
+        .resolves.toMatchObject({ allowed: true });
+    }
+    const globalBlocked = await consumeAuthAttempt("contactGlobal", globalKey);
+    expect(globalBlocked.allowed).toBe(false);
+    expect(globalBlocked.retryAfterSeconds).toBeGreaterThan(0);
+    await resetAuthAttempts("contactGlobal", globalKey);
+  });
+
   it("blocks cross-tenant reads, updates, and deletes", async () => {
     const read = await withTenantTransaction(tenantA, (tx) => getTenantResource(tx, tenantA, "alerts", alertBId));
     const update = await withTenantTransaction(tenantA, (tx) => updateTenantResource(tx, tenantA, "alerts", alertBId, { title: "Cross-tenant overwrite" }));
@@ -283,11 +309,15 @@ describe("PostgreSQL tenant isolation policies", () => {
   });
 
   it("enforces an atomic daily AI request cap and isolates usage by organization", async () => {
-    const day = getUtcDayStart(new Date("2026-10-20T18:30:00.000Z"));
+    const day = aiUsageTestDay;
     const reservations = await Promise.all(Array.from({ length: 8 }, () =>
-      withTenantTransaction(tenantA, (tx) => reserveAiAnalysisRequest(tx, organizationAId, day, 2))));
+      withTenantTransaction(tenantA, (tx) => reserveAiAnalysisRequest(tx, organizationAId, day, 2, 3))));
     expect(reservations.filter((count) => count !== null).sort()).toEqual([1, 2]);
     expect(reservations.filter((count) => count === null)).toHaveLength(6);
+
+    // A denied organization reservation must roll back its attempted shared-budget reservation.
+    expect(await withTenantTransaction(tenantA, (tx) => reserveAiAnalysisRequest(tx, organizationAId, day, 2, 10)))
+      .toBeNull();
 
     await withTenantTransaction(tenantA, (tx) => recordAiAnalysisOutcome(tx, organizationAId, day, "succeeded", 150));
     await withTenantTransaction(tenantA, (tx) => recordAiAnalysisOutcome(tx, organizationAId, day, "failed", 450));
@@ -300,10 +330,12 @@ describe("PostgreSQL tenant isolation policies", () => {
       where: { organizationId_day: { organizationId: organizationAId, day } },
     }));
     expect(otherUsage).toBeNull();
-    await expect(withTenantTransaction(tenantA, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2)))
+    await expect(withTenantTransaction(tenantA, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2, 3)))
       .rejects.toThrow();
-    expect(await withTenantTransaction(tenantB, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2)))
-      .toBe(1);
+    expect(await withTenantTransaction(tenantB, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2, 3))).toBe(1);
+    expect(await withTenantTransaction(tenantB, (tx) => reserveAiAnalysisRequest(tx, organizationBId, day, 2, 3))).toBeNull();
+    const sharedUsage = await withTenantTransaction(tenantA, (tx) => tx.aiProviderUsageDaily.findUnique({ where: { day } }));
+    expect(sharedUsage).toMatchObject({ requests: 3, succeeded: 1, failed: 1, totalLatencyMs: 600 });
   });
 
   it("scopes billing rows, enforces plan features, and applies signed-event snapshots idempotently", async () => {

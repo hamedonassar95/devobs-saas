@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { consumeAuthAttempt } from "@/lib/auth/rate-limit";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 const contactSchema = z.object({
   name: z
@@ -14,38 +16,12 @@ const contactSchema = z.object({
   website: z.string().optional().default(""),
 });
 
-const WINDOW_MS = 10 * 60 * 1000;
-const MAX_SUBMISSIONS = 4;
-const submissions = new Map<string, { count: number; resetAt: number }>();
-
-function takeSubmission(request: Request): boolean {
-  const forwardedFor = request.headers
-    .get("x-forwarded-for")
-    ?.split(",")[0]
-    ?.trim();
-  const key = forwardedFor || request.headers.get("x-real-ip") || "unknown";
-  const now = Date.now();
-  const current = submissions.get(key);
-
-  if (!current || current.resetAt <= now) {
-    if (submissions.size >= 256) {
-      for (const [address, limit] of submissions) {
-        if (limit.resetAt <= now) submissions.delete(address);
-      }
-      if (submissions.size >= 256) return false;
-    }
-    submissions.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    return true;
-  }
-  if (current.count >= MAX_SUBMISSIONS) return false;
-  current.count += 1;
-  return true;
-}
-
 export async function POST(request: Request) {
-  const parsed = contactSchema.safeParse(
-    await request.json().catch(() => null),
-  );
+  const body = await readBoundedJson(request);
+  if (body && "tooLarge" in body) {
+    return NextResponse.json({ error: "The contact message is too large." }, { status: 413 });
+  }
+  const parsed = contactSchema.safeParse(body?.data ?? null);
   if (!parsed.success)
     return NextResponse.json(
       { error: "Check the form fields and try again." },
@@ -54,12 +30,6 @@ export async function POST(request: Request) {
 
   // Quietly accept honeypot submissions without forwarding them to the email provider.
   if (parsed.data.website) return NextResponse.json({ ok: true });
-  if (!takeSubmission(request)) {
-    return NextResponse.json(
-      { error: "Too many messages. Please try again in a few minutes." },
-      { status: 429 },
-    );
-  }
 
   const apiKey = process.env.RESEND_API_KEY;
   const destination = process.env.CONTACT_EMAIL;
@@ -68,6 +38,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Contact is temporarily unavailable. Please try again later." },
       { status: 503 },
+    );
+  }
+
+  const emailLimit = await consumeAuthAttempt("contactEmail", parsed.data.email);
+  const globalLimit = emailLimit.allowed
+    ? await consumeAuthAttempt("contactGlobal", "all-contact-submissions")
+    : emailLimit;
+  if (!emailLimit.allowed || !globalLimit.allowed) {
+    const retryAfterSeconds = Math.max(emailLimit.retryAfterSeconds, globalLimit.retryAfterSeconds);
+    return NextResponse.json(
+      { error: "Too many messages. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
     );
   }
 

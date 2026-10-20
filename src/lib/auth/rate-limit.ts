@@ -2,13 +2,16 @@ import { createHmac } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = {
-  login: 10,
-  register: 4,
+const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
+const RATE_LIMITS = {
+  login: { maxAttempts: 10, windowMs: 15 * MINUTE },
+  register: { maxAttempts: 4, windowMs: 15 * MINUTE },
+  contactEmail: { maxAttempts: 4, windowMs: 10 * MINUTE },
+  contactGlobal: { maxAttempts: 50, windowMs: DAY },
 } as const;
 
-export type AuthRateLimitAction = keyof typeof MAX_ATTEMPTS;
+export type AuthRateLimitAction = keyof typeof RATE_LIMITS;
 type AuthRateLimitClient = Pick<PrismaClient, "$queryRaw" | "$executeRaw">;
 
 type AttemptRow = {
@@ -32,11 +35,12 @@ export async function consumeAuthAttempt(
   now = new Date(),
 ): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
   const keyHash = createKeyHash(action, email);
-  const expiredBefore = new Date(now.getTime() - WINDOW_MS);
+  const expiredBefore = new Date(now.getTime() - RATE_LIMITS[action].windowMs);
   if ((Number.parseInt(keyHash.slice(0, 2), 16) & 0x3f) === 0) {
+    const staleBefore = new Date(now.getTime() - DAY);
     await client.$executeRaw`
       DELETE FROM "auth_attempt_limits"
-      WHERE "windowStartedAt" <= ${expiredBefore}
+      WHERE "windowStartedAt" <= ${staleBefore}
     `;
   }
   const rows = await client.$queryRaw<AttemptRow[]>`
@@ -52,15 +56,29 @@ export async function consumeAuthAttempt(
         ELSE "auth_attempt_limits"."windowStartedAt"
       END,
       "updatedAt" = ${now}
+    WHERE "auth_attempt_limits"."windowStartedAt" <= ${expiredBefore}
+       OR "auth_attempt_limits"."attempts" < ${RATE_LIMITS[action].maxAttempts}
     RETURNING "attempts", "windowStartedAt"
   `;
 
   const attempt = rows[0];
-  if (!attempt) throw new Error("Could not record authentication attempt");
-  const allowed = attempt.attempts <= MAX_ATTEMPTS[action];
+  if (!attempt) {
+    const current = await client.$queryRaw<AttemptRow[]>`
+      SELECT "attempts", "windowStartedAt"
+      FROM "auth_attempt_limits"
+      WHERE "keyHash" = ${keyHash}
+    `;
+    const blocked = current[0];
+    if (!blocked) throw new Error("Could not record rate limit attempt");
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((blocked.windowStartedAt.getTime() + RATE_LIMITS[action].windowMs - now.getTime()) / 1000)),
+    };
+  }
+  const allowed = attempt.attempts <= RATE_LIMITS[action].maxAttempts;
   const retryAfterSeconds = allowed
     ? 0
-    : Math.max(1, Math.ceil((attempt.windowStartedAt.getTime() + WINDOW_MS - now.getTime()) / 1000));
+    : Math.max(1, Math.ceil((attempt.windowStartedAt.getTime() + RATE_LIMITS[action].windowMs - now.getTime()) / 1000));
 
   return { allowed, retryAfterSeconds };
 }
