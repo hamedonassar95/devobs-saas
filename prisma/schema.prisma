@@ -159,16 +159,17 @@ model CiCdIntegration {
 }
 
 model MonitoringSource {
-  id             String             @id @default(cuid())
-  organizationId String
-  provider       MonitoringProvider
-  name           String
-  endpoint       String?
-  status         ResourceStatus     @default(ACTIVE)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  alerts         Alert[]
+  id                String                       @id @default(cuid())
+  organizationId    String
+  provider          MonitoringProvider
+  name              String
+  endpoint          String?
+  status            ResourceStatus               @default(ACTIVE)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  organization      Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alerts            Alert[]
+  webhookCredential MonitoringWebhookCredential?
 
   @@unique([organizationId, id])
   @@unique([organizationId, provider, name])
@@ -188,14 +189,28 @@ model Alert {
   resolvedAt      DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+  externalId      String?
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   source          MonitoringSource? @relation(fields: [organizationId, sourceId], references: [organizationId, id], onDelete: Restrict)
   analysisResults AnalysisResult[]
 
   @@unique([organizationId, id])
+  @@unique([organizationId, sourceId, externalId])
   @@index([organizationId, status, severity])
   @@index([organizationId, sourceId])
   @@map("alerts")
+}
+
+model MonitoringWebhookCredential {
+  id             String           @id @default(cuid())
+  organizationId String
+  sourceId       String
+  tokenHash      String           @unique
+  createdAt      DateTime         @default(now())
+  source         MonitoringSource @relation(fields: [organizationId, sourceId], references: [organizationId, id], onDelete: Cascade)
+
+  @@unique([organizationId, sourceId])
+  @@map("monitoring_webhook_credentials")
 }
 
 model AnalysisResult {

@@ -36,6 +36,12 @@ An organization owner can open `/billing`, choose one of the three plans, and co
 
 Plan access: Monitoring only includes monitoring sources and alerts; CI/CD includes CI/CD integrations; Full with AI includes monitoring, CI/CD, and AI analysis. Resource API routes return HTTP 402 when the organization lacks an active or trialing subscription with that feature.
 
+## Free-only provider integrations
+
+The provider API supports read-only GitHub Actions, GitLab.com, and Bitbucket Cloud pipeline history. It does not run, retry, or cancel customer jobs, and it does not store the read-only provider tokens. Prometheus Alertmanager and self-hosted Grafana OSS can deliver alerts to a tenant-specific webhook; the bearer secret is returned once at source creation and only its SHA-256 hash is stored. A local rules endpoint produces deterministic alert triage without calling a generative AI provider. Usage-metered Vertex AI/Gemini, Datadog, CloudWatch, and Grafana Cloud integrations are not enabled.
+
+See [provider costs and setup](docs/provider-costs.md) for current official pricing references, API examples, and costs that remain outside the app, including Cloud Run, PostgreSQL, and customer CI/monitoring infrastructure.
+
 ## Marketing page and contact form (Phase 4)
 
 The home page presents the product features, monthly plans, and 14-day trial. When `STRIPE_SECRET_KEY` and the three `STRIPE_PRICE_*` values are configured, plan amounts are read from Stripe and cached for up to one hour. If Stripe pricing is not configured or temporarily unavailable, the page says that the current amount will be confirmed at Checkout; Checkout remains the source of truth.
