@@ -10,7 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  node:
+    name: Node.js checks (Devobs shared)
+    permissions:
+      contents: read
+    uses: hamedonassar95/Devobs/.github/workflows/reusable-node-ci.yml@6fae8aa9bd438f5c5e3d4122e953ffe90982b792
+    with:
+      node_version: "22"
+
   verify:
+    name: Tenant database, Terraform, and container checks
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -45,9 +54,6 @@ jobs:
           terraform -chdir=infra/terraform validate
       - run: npm ci
       - run: npx prisma generate
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
       - name: Create non-superuser application role and database
         env:
           PGPASSWORD: postgres
@@ -56,14 +62,13 @@ jobs:
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE devobs_saas OWNER devobs_app"
       - run: npx prisma migrate deploy
       - run: npm run test:integration
-      - run: npm run build
       - name: Build production container
         run: docker build --target runner --tag devobs-saas:ci .
       - name: Build migration job container
         run: docker build --target migrator --tag devobs-saas:migrator-ci .
 
   deploy:
-    needs: verify
+    needs: [node, verify]
     if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != '' }}
     permissions:
       contents: read
