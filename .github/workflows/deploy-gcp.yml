@@ -1,0 +1,141 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != '' }}
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+      GCP_CLOUD_RUN_SERVICE: ${{ vars.GCP_CLOUD_RUN_SERVICE }}
+      GCP_RUNTIME_SERVICE_ACCOUNT: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
+      GCP_CLOUD_SQL_INSTANCE: ${{ vars.GCP_CLOUD_SQL_INSTANCE }}
+      APP_URL: ${{ vars.APP_URL }}
+      STRIPE_PRICE_MONITORING: ${{ vars.STRIPE_PRICE_MONITORING }}
+      STRIPE_PRICE_CICD: ${{ vars.STRIPE_PRICE_CICD }}
+      STRIPE_PRICE_FULL: ${{ vars.STRIPE_PRICE_FULL }}
+      CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
+      CONTACT_FROM_EMAIL: ${{ vars.CONTACT_FROM_EMAIL }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${GCP_PROJECT_ID:?Set the GCP_PROJECT_ID repository variable}"
+          : "${GCP_REGION:?Set the GCP_REGION repository variable}"
+          : "${GCP_ARTIFACT_REPOSITORY:?Set the GCP_ARTIFACT_REPOSITORY repository variable}"
+          : "${GCP_CLOUD_RUN_SERVICE:?Set the GCP_CLOUD_RUN_SERVICE repository variable}"
+          : "${GCP_RUNTIME_SERVICE_ACCOUNT:?Set the GCP_RUNTIME_SERVICE_ACCOUNT repository variable}"
+          : "${APP_URL:?Set APP_URL to the canonical HTTPS application URL}"
+          : "${STRIPE_PRICE_MONITORING:?Set STRIPE_PRICE_MONITORING}"
+          : "${STRIPE_PRICE_CICD:?Set STRIPE_PRICE_CICD}"
+          : "${STRIPE_PRICE_FULL:?Set STRIPE_PRICE_FULL}"
+          : "${CONTACT_EMAIL:?Set CONTACT_EMAIL}"
+          : "${CONTACT_FROM_EMAIL:?Set CONTACT_FROM_EMAIL}"
+          case "$APP_URL" in https://*) ;; *) echo "APP_URL must use HTTPS" >&2; exit 1 ;; esac
+
+      - name: Build and push immutable image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud config set project "$GCP_PROJECT_ID"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          image="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/${GCP_CLOUD_RUN_SERVICE}:${GITHUB_SHA}"
+          migration_image="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/${GCP_CLOUD_RUN_SERVICE}:migrate-${GITHUB_SHA}"
+          docker build --pull --target runner --tag "$image" .
+          docker push "$image"
+          docker build --pull --target migrator --tag "$migration_image" .
+          docker push "$migration_image"
+          echo "name=$image" >> "$GITHUB_OUTPUT"
+          echo "migration=$migration_image" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migrations
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.migration }}
+        run: |
+          set -euo pipefail
+          cloud_sql_args=()
+          if [[ -n "${GCP_CLOUD_SQL_INSTANCE:-}" ]]; then
+            cloud_sql_args+=(--set-cloudsql-instances "$GCP_CLOUD_SQL_INSTANCE")
+          fi
+          gcloud run jobs deploy "${GCP_CLOUD_RUN_SERVICE}-migrate" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --image "$IMAGE" \
+            --service-account "$GCP_RUNTIME_SERVICE_ACCOUNT" \
+            --set-secrets DATABASE_URL=devobs-database-url:latest \
+            --max-retries 1 \
+            --task-timeout 10m \
+            "${cloud_sql_args[@]}"
+          gcloud run jobs execute "${GCP_CLOUD_RUN_SERVICE}-migrate" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --wait
+
+      - name: Deploy application revision
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+        run: |
+          set -euo pipefail
+          cloud_sql_args=()
+          if [[ -n "${GCP_CLOUD_SQL_INSTANCE:-}" ]]; then
+            cloud_sql_args+=(--set-cloudsql-instances "$GCP_CLOUD_SQL_INSTANCE")
+          fi
+          gcloud run deploy "$GCP_CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --platform managed \
+            --image "$IMAGE" \
+            --service-account "$GCP_RUNTIME_SERVICE_ACCOUNT" \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min 0 \
+            --max 10 \
+            --concurrency 40 \
+            --timeout 60 \
+            --set-env-vars "APP_URL=${APP_URL},STRIPE_PRICE_MONITORING=${STRIPE_PRICE_MONITORING},STRIPE_PRICE_CICD=${STRIPE_PRICE_CICD},STRIPE_PRICE_FULL=${STRIPE_PRICE_FULL},CONTACT_EMAIL=${CONTACT_EMAIL},CONTACT_FROM_EMAIL=${CONTACT_FROM_EMAIL}" \
+            --set-secrets "DATABASE_URL=devobs-database-url:latest,STRIPE_SECRET_KEY=devobs-stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=devobs-stripe-webhook-secret:latest,RESEND_API_KEY=devobs-resend-api-key:latest" \
+            "${cloud_sql_args[@]}"
+
+      - name: Verify deployed health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          service_url="$(gcloud run services describe "$GCP_CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --format='value(status.url)')"
+          curl --fail --show-error --silent \
+            --retry 10 --retry-delay 6 --retry-connrefused \
+            "${service_url}/api/health"

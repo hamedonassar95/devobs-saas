@@ -47,3 +47,7 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run test:integration
       - run: npm run build
+      - name: Build production container
+        run: docker build --target runner --tag devobs-saas:ci .
+      - name: Build migration job container
+        run: docker build --target migrator --tag devobs-saas:migrator-ci .
