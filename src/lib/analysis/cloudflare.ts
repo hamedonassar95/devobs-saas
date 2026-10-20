@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getDailyAiRequestLimit } from "@/lib/analysis/usage";
+import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit } from "@/lib/analysis/usage";
 
 export const CLOUDFLARE_ANALYSIS_MODEL_ID = "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8";
 const CLOUDFLARE_MODEL_PATH = "@cf/meta/llama-3.1-8b-instruct-fp8";
@@ -53,9 +53,10 @@ export function getCloudflareWorkersAiConfig(
   const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim() ?? "";
   const apiToken = env.CLOUDFLARE_API_TOKEN?.trim() ?? "";
   const dailyLimit = getDailyAiRequestLimit(env);
+  const platformDailyLimit = getPlatformDailyAiRequestLimit(env);
   if (env.CLOUDFLARE_WORKERS_AI_ENABLED !== "true") return null;
   if (!isCloudflareWorkersAiFreePlanConfirmed(env)) return null;
-  if (dailyLimit === null) return null;
+  if (dailyLimit === null || platformDailyLimit === null) return null;
   if (!/^[a-f0-9]{32}$/i.test(accountId) || !apiToken) return null;
   return { accountId, apiToken };
 }

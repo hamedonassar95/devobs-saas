@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getDailyAiRequestLimit, getUtcDayStart } from "./usage";
+import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, getUtcDayStart } from "./usage";
 
 describe("AI usage budget configuration", () => {
   it("uses a small default and accepts bounded positive integer overrides", () => {
@@ -17,5 +17,19 @@ describe("AI usage budget configuration", () => {
   it("uses UTC midnight so tenants share an unambiguous daily window", () => {
     expect(getUtcDayStart(new Date("2026-10-20T23:59:59.999Z")).toISOString())
       .toBe("2026-10-20T00:00:00.000Z");
+  });
+});
+
+describe("shared AI provider budget configuration", () => {
+  it("defaults to a small platform-wide cap and accepts bounded overrides", () => {
+    expect(getPlatformDailyAiRequestLimit({})).toBe(10);
+    expect(getPlatformDailyAiRequestLimit({ CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_TOTAL: "1" })).toBe(1);
+    expect(getPlatformDailyAiRequestLimit({ CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_TOTAL: "100" })).toBe(100);
+  });
+
+  it("fails closed for malformed or excessive shared limits", () => {
+    for (const value of ["0", "101", "ten", "1.5"]) {
+      expect(getPlatformDailyAiRequestLimit({ CLOUDFLARE_WORKERS_AI_MAX_DAILY_REQUESTS_TOTAL: value })).toBeNull();
+    }
   });
 });
