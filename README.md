@@ -38,7 +38,9 @@ Plan access: Monitoring only includes monitoring sources and alerts; CI/CD inclu
 
 ## Free-only provider integrations
 
-The provider API supports read-only GitHub Actions, GitLab.com, and Bitbucket Cloud pipeline history. It does not run, retry, or cancel customer jobs, and it does not store the read-only provider tokens. Prometheus Alertmanager and self-hosted Grafana OSS can deliver alerts to a tenant-specific webhook; the bearer secret is returned once at source creation and only its SHA-256 hash is stored. A local rules endpoint produces deterministic alert triage without calling a generative AI provider. Usage-metered Vertex AI/Gemini, Datadog, CloudWatch, and Grafana Cloud integrations are not enabled.
+The provider API supports read-only GitHub Actions, GitLab.com, and Bitbucket Cloud pipeline history. It does not run, retry, or cancel customer jobs, and it does not store the read-only provider tokens. Prometheus Alertmanager and self-hosted Grafana OSS can deliver alerts to a tenant-specific webhook; the bearer secret is returned once at source creation and only its SHA-256 hash is stored. Alert analysis uses deterministic local rules by default. An organization owner or admin can explicitly opt in to Cloudflare Workers AI only when the application operator has configured it for a Cloudflare Workers Free account. The opt-in is off by default; the integration sends redacted alert text, makes one bounded request without retries, and never performs production actions. Usage-metered Vertex AI/Gemini, OpenAI, Datadog, CloudWatch, and Grafana Cloud integrations are not enabled.
+
+For local development, `CLOUDFLARE_WORKERS_AI_ENABLED` defaults to `false` and the Cloudflare account ID/token are blank. To use the model, the operator must configure the provider token on the server, verify the provider account is on Workers Free, and leave the global flag disabled until that review is complete. An organization owner/admin can then inspect `GET /api/organizations/{organizationId}/ai-settings` and enable analysis with `PATCH` and `{"enabled":true}`. The organization must have an active or trialing Full plan. Alert analysis stays local until both the global provider configuration and the organization opt-in are enabled. See [provider costs and setup](docs/provider-costs.md) for the documented quota and data handling.
 
 See [provider costs and setup](docs/provider-costs.md) for current official pricing references, API examples, and costs that remain outside the app, including Cloud Run, PostgreSQL, and customer CI/monitoring infrastructure.
 
@@ -90,7 +92,7 @@ The federation trust uses the immutable GitHub repository and owner IDs in `terr
 
 ### 2. Add runtime values to Secret Manager
 
-Create versions for `devobs-database-url`, `devobs-stripe-secret-key`, `devobs-stripe-webhook-secret`, and `devobs-resend-api-key`. Supply values through standard input so they do not appear in shell history or command arguments. For example:
+Create versions for `devobs-database-url`, `devobs-stripe-secret-key`, `devobs-stripe-webhook-secret`, and `devobs-resend-api-key`. If and only if you have reviewed the Cloudflare free-tier terms and confirmed the account remains on Workers Free, you may also create a version for `devobs-cloudflare-ai-api-token`. Supply values through standard input so they do not appear in shell history or command arguments. For example:
 
 ```sh
 read -rsp 'DATABASE_URL: ' secret_value; printf '%s' "$secret_value" | gcloud secrets versions add devobs-database-url --data-file=- --project="$PROJECT_ID"; unset secret_value; printf '\n'
@@ -115,6 +117,9 @@ In the repository's **Settings → Secrets and variables → Actions → Variabl
 | `GCP_STRIPE_SECRET_KEY_SECRET_VERSION` | Numeric version containing `STRIPE_SECRET_KEY` |
 | `GCP_STRIPE_WEBHOOK_SECRET_VERSION` | Numeric version containing `STRIPE_WEBHOOK_SECRET` |
 | `GCP_RESEND_API_KEY_SECRET_VERSION` | Numeric version containing `RESEND_API_KEY` |
+| `CLOUDFLARE_WORKERS_AI_ENABLED` | Optional; `true` only after confirming the Cloudflare account is on Workers Free; otherwise leave unset or `false` |
+| `CLOUDFLARE_ACCOUNT_ID` | Required only when the optional Cloudflare AI integration is enabled |
+| `GCP_CLOUDFLARE_API_TOKEN_SECRET_VERSION` | Required only when enabled; numeric Secret Manager version containing the Workers AI API token |
 | `APP_URL` | Canonical public HTTPS URL for the app |
 | `STRIPE_PRICE_MONITORING` | Stripe monthly Price ID for Monitoring |
 | `STRIPE_PRICE_CICD` | Stripe monthly Price ID for CI/CD |

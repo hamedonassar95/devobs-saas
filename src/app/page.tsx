@@ -19,7 +19,7 @@ const planHighlights: Record<BillingPlan, string[]> = {
   FULL: [
     "Monitoring and alerts",
     "CI/CD integrations",
-    "AI-assisted analysis records",
+    "Opt-in AI-assisted analysis",
   ],
 };
 
@@ -45,7 +45,7 @@ const features = [
     icon: "✳",
     title: "Analysis that stays attached",
     description:
-      "Keep investigation summaries alongside the alerts they explain, giving your team a useful record as incidents unfold.",
+      "With explicit organization opt-in, Cloudflare Workers AI (Built with Meta Llama 3) can add incident recommendations; deterministic local checks remain available when AI is off.",
     tag: "AI-ASSISTED",
   },
 ];
@@ -95,7 +95,7 @@ export default async function HomePage() {
             <span>Stay in control.</span>
           </h1>
           <p className="hero-description">
-            CI/CD, monitoring, and AI-assisted incident analysis in one
+            CI/CD, monitoring, and optional AI-assisted incident analysis in one
             workspace—so your team can spend less time chasing tools and more
             time building.
           </p>

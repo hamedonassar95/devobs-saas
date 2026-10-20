@@ -44,6 +44,7 @@ locals {
     STRIPE_SECRET_KEY     = "devobs-stripe-secret-key"
     STRIPE_WEBHOOK_SECRET = "devobs-stripe-webhook-secret"
     RESEND_API_KEY        = "devobs-resend-api-key"
+    CLOUDFLARE_API_TOKEN  = "devobs-cloudflare-ai-api-token"
   }
 
   deployer_roles = toset([

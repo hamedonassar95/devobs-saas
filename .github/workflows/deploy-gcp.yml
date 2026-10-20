@@ -27,12 +27,15 @@ jobs:
       GCP_STRIPE_SECRET_KEY_SECRET_VERSION: ${{ vars.GCP_STRIPE_SECRET_KEY_SECRET_VERSION }}
       GCP_STRIPE_WEBHOOK_SECRET_VERSION: ${{ vars.GCP_STRIPE_WEBHOOK_SECRET_VERSION }}
       GCP_RESEND_API_KEY_SECRET_VERSION: ${{ vars.GCP_RESEND_API_KEY_SECRET_VERSION }}
+      GCP_CLOUDFLARE_API_TOKEN_SECRET_VERSION: ${{ vars.GCP_CLOUDFLARE_API_TOKEN_SECRET_VERSION }}
       APP_URL: ${{ vars.APP_URL }}
       STRIPE_PRICE_MONITORING: ${{ vars.STRIPE_PRICE_MONITORING }}
       STRIPE_PRICE_CICD: ${{ vars.STRIPE_PRICE_CICD }}
       STRIPE_PRICE_FULL: ${{ vars.STRIPE_PRICE_FULL }}
       CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
       CONTACT_FROM_EMAIL: ${{ vars.CONTACT_FROM_EMAIL }}
+      CLOUDFLARE_WORKERS_AI_ENABLED: ${{ vars.CLOUDFLARE_WORKERS_AI_ENABLED }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -74,6 +77,21 @@ jobs:
           : "${STRIPE_PRICE_FULL:?Set STRIPE_PRICE_FULL}"
           : "${CONTACT_EMAIL:?Set CONTACT_EMAIL}"
           : "${CONTACT_FROM_EMAIL:?Set CONTACT_FROM_EMAIL}"
+          if [[ "${CLOUDFLARE_WORKERS_AI_ENABLED:-false}" == "true" ]]; then
+            : "${CLOUDFLARE_ACCOUNT_ID:?Set CLOUDFLARE_ACCOUNT_ID for Workers AI}"
+            : "${GCP_CLOUDFLARE_API_TOKEN_SECRET_VERSION:?Set the Cloudflare API token secret version}"
+            [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[a-fA-F0-9]{32}$ ]] || {
+              echo "CLOUDFLARE_ACCOUNT_ID must be a 32-character hexadecimal account ID." >&2
+              exit 1
+            }
+            [[ "$GCP_CLOUDFLARE_API_TOKEN_SECRET_VERSION" =~ ^[1-9][0-9]*$ ]] || {
+              echo "Cloudflare API token secret version must be a positive numeric Secret Manager version." >&2
+              exit 1
+            }
+          elif [[ -n "${CLOUDFLARE_WORKERS_AI_ENABLED:-}" && "$CLOUDFLARE_WORKERS_AI_ENABLED" != "false" ]]; then
+            echo "CLOUDFLARE_WORKERS_AI_ENABLED must be true or false." >&2
+            exit 1
+          fi
           for version in \
             "$GCP_DATABASE_URL_SECRET_VERSION" \
             "$GCP_STRIPE_SECRET_KEY_SECRET_VERSION" \
@@ -152,6 +170,12 @@ jobs:
             cloud_sql_args+=(--set-cloudsql-instances "$GCP_CLOUD_SQL_INSTANCE")
           fi
           candidate_tag="candidate-${GITHUB_SHA:0:12}"
+          runtime_env_vars="APP_URL=${APP_URL},STRIPE_PRICE_MONITORING=${STRIPE_PRICE_MONITORING},STRIPE_PRICE_CICD=${STRIPE_PRICE_CICD},STRIPE_PRICE_FULL=${STRIPE_PRICE_FULL},CONTACT_EMAIL=${CONTACT_EMAIL},CONTACT_FROM_EMAIL=${CONTACT_FROM_EMAIL},CLOUDFLARE_WORKERS_AI_ENABLED=false"
+          runtime_secrets="DATABASE_URL=devobs-database-url:${GCP_DATABASE_URL_SECRET_VERSION},STRIPE_SECRET_KEY=devobs-stripe-secret-key:${GCP_STRIPE_SECRET_KEY_SECRET_VERSION},STRIPE_WEBHOOK_SECRET=devobs-stripe-webhook-secret:${GCP_STRIPE_WEBHOOK_SECRET_VERSION},RESEND_API_KEY=devobs-resend-api-key:${GCP_RESEND_API_KEY_SECRET_VERSION}"
+          if [[ "${CLOUDFLARE_WORKERS_AI_ENABLED:-false}" == "true" ]]; then
+            runtime_env_vars="${runtime_env_vars%,CLOUDFLARE_WORKERS_AI_ENABLED=false},CLOUDFLARE_WORKERS_AI_ENABLED=true,CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}"
+            runtime_secrets="${runtime_secrets},CLOUDFLARE_API_TOKEN=devobs-cloudflare-ai-api-token:${GCP_CLOUDFLARE_API_TOKEN_SECRET_VERSION}"
+          fi
           gcloud run deploy "$GCP_CLOUD_RUN_SERVICE" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
@@ -168,8 +192,8 @@ jobs:
             --timeout 60 \
             --no-traffic \
             --tag "$candidate_tag" \
-            --set-env-vars "APP_URL=${APP_URL},STRIPE_PRICE_MONITORING=${STRIPE_PRICE_MONITORING},STRIPE_PRICE_CICD=${STRIPE_PRICE_CICD},STRIPE_PRICE_FULL=${STRIPE_PRICE_FULL},CONTACT_EMAIL=${CONTACT_EMAIL},CONTACT_FROM_EMAIL=${CONTACT_FROM_EMAIL}" \
-            --set-secrets "DATABASE_URL=devobs-database-url:${GCP_DATABASE_URL_SECRET_VERSION},STRIPE_SECRET_KEY=devobs-stripe-secret-key:${GCP_STRIPE_SECRET_KEY_SECRET_VERSION},STRIPE_WEBHOOK_SECRET=devobs-stripe-webhook-secret:${GCP_STRIPE_WEBHOOK_SECRET_VERSION},RESEND_API_KEY=devobs-resend-api-key:${GCP_RESEND_API_KEY_SECRET_VERSION}" \
+            --set-env-vars "$runtime_env_vars" \
+            --set-secrets "$runtime_secrets" \
             --quiet \
             "${cloud_sql_args[@]}"
 
