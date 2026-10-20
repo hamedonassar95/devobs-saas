@@ -53,6 +53,23 @@ enum AlertStatus {
   RESOLVED
 }
 
+enum SubscriptionPlan {
+  MONITORING
+  CICD
+  FULL
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  PAUSED
+}
+
 model Organization {
   id                String             @id @default(cuid())
   name              String
@@ -64,6 +81,8 @@ model Organization {
   monitoringSources MonitoringSource[]
   alerts            Alert[]
   analysisResults   AnalysisResult[]
+  stripeCustomerId  String?            @unique
+  subscriptions     Subscription[]
 
   @@unique([id, slug])
   @@map("organizations")
@@ -184,4 +203,32 @@ model AnalysisResult {
   @@index([organizationId, createdAt])
   @@index([organizationId, alertId])
   @@map("analysis_results")
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  organizationId       String
+  stripeSubscriptionId String             @unique
+  plan                 SubscriptionPlan
+  status               SubscriptionStatus
+  trialStartedAt       DateTime?
+  trialEndsAt          DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  lastEventCreatedAt   BigInt?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@map("subscriptions")
+}
+
+model ProcessedStripeEvent {
+  id          String   @id
+  eventType   String
+  processedAt DateTime @default(now())
+
+  @@map("processed_stripe_events")
 }
