@@ -5,7 +5,7 @@ export type BillingPlan = (typeof BILLING_PLANS)[number];
 export const PLAN_CATALOG: Record<BillingPlan, { name: string; description: string }> = {
   MONITORING: { name: "Monitoring only", description: "Monitoring sources and alerts." },
   CICD: { name: "CI/CD", description: "Connect and manage CI/CD integrations." },
-  FULL: { name: "Full with AI", description: "Monitoring, CI/CD, and AI-assisted analysis." },
+  FULL: { name: "Full with AI", description: "Monitoring, CI/CD, and opt-in AI-assisted analysis." },
 };
 
 const PLAN_FEATURES: Record<BillingPlan, readonly ProductFeature[]> = {

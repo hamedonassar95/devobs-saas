@@ -31,7 +31,9 @@ describe("tenant boundaries", () => {
       .mockResolvedValueOnce({ role: MembershipRole.VIEWER })
       .mockResolvedValueOnce({ role: MembershipRole.MEMBER })
       .mockResolvedValueOnce({ role: MembershipRole.MEMBER })
-      .mockResolvedValueOnce({ role: MembershipRole.ADMIN });
+      .mockResolvedValueOnce({ role: MembershipRole.ADMIN })
+      .mockResolvedValueOnce({ role: MembershipRole.MEMBER })
+      .mockResolvedValueOnce({ role: MembershipRole.OWNER });
     const client = { membership: { findFirst } } as unknown as PrismaClient;
 
     await expect(requireTenantContextForPermission("viewer", "org-a", "write", client))
@@ -42,7 +44,11 @@ describe("tenant boundaries", () => {
       .rejects.toBeInstanceOf(TenantPermissionError);
     await expect(requireTenantContextForPermission("admin", "org-a", "delete", client))
       .resolves.toEqual({ userId: "admin", organizationId: "org-a" });
-    expect(findFirst).toHaveBeenCalledTimes(4);
+    await expect(requireTenantContextForPermission("member", "org-a", "admin", client))
+      .rejects.toBeInstanceOf(TenantPermissionError);
+    await expect(requireTenantContextForPermission("owner", "org-a", "admin", client))
+      .resolves.toEqual({ userId: "owner", organizationId: "org-a" });
+    expect(findFirst).toHaveBeenCalledTimes(6);
     expect(findFirst).toHaveBeenCalledWith({
       where: { userId: "viewer", organizationId: "org-a", status: MembershipStatus.ACTIVE },
       select: { role: true },

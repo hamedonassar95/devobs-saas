@@ -1,11 +1,11 @@
 import { MembershipRole, MembershipStatus, Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
-export type TenantPermission = "read" | "write" | "delete";
+export type TenantPermission = "read" | "write" | "delete" | "admin";
 
 const rolePermissions: Record<MembershipRole, readonly TenantPermission[]> = {
-  OWNER: ["read", "write", "delete"],
-  ADMIN: ["read", "write", "delete"],
+  OWNER: ["read", "write", "delete", "admin"],
+  ADMIN: ["read", "write", "delete", "admin"],
   MEMBER: ["read", "write"],
   VIEWER: ["read"],
 };

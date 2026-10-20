@@ -257,6 +257,29 @@ describe("PostgreSQL tenant isolation policies", () => {
     ]);
   });
 
+  it("keeps AI analysis opt-in scoped to one organization and restricted to its administrators", async () => {
+    await expect(requireTenantContextForPermission(userAId, organizationBId, "admin"))
+      .rejects.toThrow("Organization not found");
+    await expect(requireTenantContextForPermission(userAId, organizationAId, "admin"))
+      .resolves.toMatchObject({ userId: userAId, organizationId: organizationAId });
+
+    await withTenantTransaction(tenantA, (tx) => tx.organization.update({
+      where: { id: tenantA.organizationId },
+      data: { aiAnalysisEnabled: true },
+    }));
+    const settingA = await withTenantTransaction(tenantA, (tx) => tx.organization.findUnique({
+      where: { id: tenantA.organizationId },
+      select: { aiAnalysisEnabled: true },
+    }));
+    const settingB = await withTenantTransaction(tenantB, (tx) => tx.organization.findUnique({
+      where: { id: tenantB.organizationId },
+      select: { aiAnalysisEnabled: true },
+    }));
+
+    expect(settingA?.aiAnalysisEnabled).toBe(true);
+    expect(settingB?.aiAnalysisEnabled).toBe(false);
+  });
+
   it("scopes billing rows, enforces plan features, and applies signed-event snapshots idempotently", async () => {
     const trialStartedAt = new Date("2026-10-20T00:00:00.000Z");
     const trialEndsAt = new Date("2026-11-03T00:00:00.000Z");
