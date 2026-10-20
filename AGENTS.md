@@ -29,7 +29,9 @@ Tenant-aware foundations are implemented on `main`:
 - Prepare a production deployment on Google Cloud Run, including a container build, database migration job, and GitHub Actions authentication through Workload Identity Federation.
 - Use Secret Manager for runtime credentials and never store populated secrets or Terraform state in Git.
 - Support a verified custom domain with Google-managed HTTPS, an HTTPS health check, and an availability alert.
-- Google Cloud project ID: not supplied yet. Do not invent one or deploy until the owner provides the target project and access is available.
+- Target Google Cloud project ID: `tensile-verve-352716`, the project documented by the original Devobs repository.
+- Google Cloud operations are owner-machine-only. This sandbox has no access to the owner's Google Cloud account; do not run `gcloud`, inspect cloud resources, or deploy. Prepare exact Cloud Shell commands for the owner instead.
+- A target project ID is known, but infrastructure provisioning, database readiness, domain ownership, and deployment are unverified until the owner completes the Cloud Shell steps.
 
 ## Engineering rules
 - Work on a feature branch based on `main`; never commit directly to `main`.
@@ -45,4 +47,5 @@ Tenant-aware foundations are implemented on `main`:
 - Phase 3 was merged into `main` in PR #2.
 - Phase 4 was merged into `main` in PR #3.
 - Phase 5 deployment configuration was merged into `main` in PR #4.
-- Phase 5 follow-up hardening is in progress on `phase5-postmerge-hardening`; open a PR to `main` after tests pass and do not merge without explicit user confirmation.
+- Phase 5 deployment configuration and follow-up hardening were merged into `main` in PRs #4 and #5.
+- Project-specific deployment preparation must be done on a feature branch and opened as a PR to `main`; do not merge without explicit user confirmation.
