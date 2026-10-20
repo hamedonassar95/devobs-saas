@@ -44,6 +44,8 @@ For local development, `CLOUDFLARE_WORKERS_AI_ENABLED` and `CLOUDFLARE_WORKERS_A
 
 See [provider costs and setup](docs/provider-costs.md) for current official pricing references, API examples, and costs that remain outside the app, including Cloud Run, PostgreSQL, and customer CI/monitoring infrastructure.
 
+The offline [AI alert-analysis evaluation](docs/AI_EVALUATION.md) covers the SaaS response contract with synthetic cases and makes no provider calls. Its source-derived scenarios are unreviewed and do not establish model quality or production readiness.
+
 ## Marketing page and contact form (Phase 4)
 
 The home page presents the product features, monthly plans, and 14-day trial. When `STRIPE_SECRET_KEY` and the three `STRIPE_PRICE_*` values are configured, plan amounts are read from Stripe and cached for up to one hour. If Stripe pricing is not configured or temporarily unavailable, the page says that the current amount will be confirmed at Checkout; Checkout remains the source of truth.
