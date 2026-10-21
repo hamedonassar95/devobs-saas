@@ -5,8 +5,8 @@ Multi-tenant DevOps SaaS foundation built with Next.js, TypeScript, Prisma, and 
 
 ## Local setup
 
-1. Install Node.js 20 or newer and PostgreSQL.
-2. Create a non-superuser PostgreSQL application role with `NOSUPERUSER NOBYPASSRLS`, then copy `.env.example` to `.env` and set `DATABASE_URL` for that role. For a local database, an administrator can run:
+1. Install Node.js 22 or newer and PostgreSQL.
+2. Create a non-superuser PostgreSQL application role with `NOSUPERUSER NOBYPASSRLS`, then copy `.env.example` to `.env` and set `DATABASE_URL` and `DIRECT_URL` for that role. For local PostgreSQL, both URLs can be the same. An administrator can run:
 
    ```sql
    CREATE ROLE devobs_app LOGIN PASSWORD 'devobs_dev' NOSUPERUSER NOBYPASSRLS;
@@ -52,7 +52,13 @@ The home page presents the product features, monthly plans, and 14-day trial. Wh
 
 The contact form sends messages through Resend. Set `RESEND_API_KEY`, `CONTACT_EMAIL` (the inbox that receives inquiries), and `CONTACT_FROM_EMAIL` (a sender address verified for your Resend account). The example sender `onboarding@resend.dev` is only suitable for Resend's test setup; use an address on a verified domain for production. These are server-side values and must not be exposed with a `NEXT_PUBLIC_` prefix. The endpoint validates input, caps JSON bodies at 16 KiB, uses a hidden honeypot field, and applies PostgreSQL-backed limits of four submissions per email per ten minutes and 50 submissions across the application per day.
 
-## Google Cloud deployment (Phase 5)
+## Deployment (Phase 5)
+
+> **Paused:** Google Cloud has no billing account linked, and the owner asked to use a no-billing alternative. CI no longer invokes the Cloud Run deployment workflow. Keep the GCP instructions below as inactive reference only; do not enable or run them unless the owner chooses that path later.
+
+The current deployment candidate is [Netlify Free + Neon Free](docs/deploy-netlify.md), intended only for a demo or limited early pilot because these tiers do not provide production availability guarantees. The source configuration is in place, but no provider projects, database, secrets, or deploy have been created yet.
+
+### Inactive Google Cloud reference
 
 The repository includes separate production and migration containers, a GitHub Actions deployment workflow, and Terraform to prepare Google Cloud resources. It is configured for Cloud Run, Artifact Registry, Secret Manager, GitHub OIDC federation, a verified custom domain with Google-managed TLS, and Cloud Monitoring uptime alerts. The workflow deploys only from `main`; its federated identity is restricted to this repository's `main` branch.
 
@@ -135,9 +141,9 @@ In the repository's **Settings → Secrets and variables → Actions → Variabl
 
 Use positive numeric Secret Manager version numbers, not `latest`. When rotating a secret, create its new version and update its matching GitHub repository variable; the next successful deployment pins a new Cloud Run revision to that version.
 
-The `CI` workflow now owns the production deployment dependency: on `main`, its deploy job can run only after the lint, typecheck, unit and integration tests, build, and container builds all pass. This also applies to a manually dispatched `CI` run on `main`, so adding the GCP variables later does not require an unrelated code change to deploy. It skips stale runs if `main` advances before deployment or before traffic is switched. It builds and pushes immutable images, runs `prisma migrate deploy` as a Cloud Run Job, then creates a tagged Cloud Run revision with no production traffic. The workflow checks `/api/health` through the candidate URL and shifts traffic only after the check passes, then removes the temporary candidate tag. Database migration or candidate health failure stops before production traffic is changed. The app image listens on port `8080` and runs as a non-root user.
+The former GCP deploy job was invoked by `CI` only after checks passed on `main`. It built and pushed immutable images, ran `prisma migrate deploy` as a Cloud Run Job, then created a tagged Cloud Run revision with no production traffic. It checked `/api/health` through the candidate URL and shifted traffic only after the check passed. The current `CI` workflow no longer invokes this GCP job; it contains the separate, gated Netlify deployment described above. The app image listens on port `8080` and runs as a non-root user.
 
-The deployment job targets the GitHub environment named `production`. Configure required reviewers and restrict that environment to `main` in GitHub repository settings; referencing an environment in workflow YAML does not by itself enforce approval. Those settings are external to this repository and were not inspected here.
+The inactive GCP job previously targeted the GitHub environment named `production`. The current Netlify job also uses this protected environment. Its required reviewer and `main` branch restriction are configured in GitHub repository settings, outside this repository.
 
 ### 4. Attach the domain and enable uptime alerts
 
@@ -149,4 +155,4 @@ Finally, configure the Stripe webhook URL as `https://<domain>/api/billing/webho
 
 ### Deployment status
 
-This repository contains deployment configuration only. The target project ID is `tensile-verve-352716`; infrastructure provisioning and deployment still require the owner to run the Cloud Shell steps, provide a PostgreSQL connection and application secrets through the documented secret store, and configure a verified production domain for custom-domain HTTPS and uptime monitoring. The service has not been deployed from this environment.
+The current Netlify + Neon path is configuration only. Provider projects, database, secrets, and deployment still require the owner to configure the accounts described in [the deployment guide](docs/deploy-netlify.md). No service has been deployed from this environment. The Google Cloud path remains inactive because its project is not linked to billing.

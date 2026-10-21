@@ -25,13 +25,12 @@ Tenant-aware foundations are implemented on `main`:
 - Keep displayed prices aligned with the configured monthly Stripe Prices; do not invent dollar amounts.
 - Keep contact delivery server-side and use environment variables for email provider credentials and recipient/sender settings.
 
-## Current Phase 5 scope
-- Prepare a production deployment on Google Cloud Run, including a container build, database migration job, and GitHub Actions authentication through Workload Identity Federation.
-- Use Secret Manager for runtime credentials and never store populated secrets or Terraform state in Git.
-- Support a verified custom domain with Google-managed HTTPS, an HTTPS health check, and an availability alert.
-- Target Google Cloud project ID: `tensile-verve-352716`, the project documented by the original Devobs repository.
-- Google Cloud operations are owner-machine-only. This sandbox has no access to the owner's Google Cloud account; do not run `gcloud`, inspect cloud resources, or deploy. Prepare exact Cloud Shell commands for the owner instead.
-- A target project ID is known, but infrastructure provisioning, database readiness, domain ownership, and deployment are unverified until the owner completes the Cloud Shell steps.
+## Current deployment status and approved alternative
+- The original Google Cloud Run route is paused by the owner because the target project has no billing account. Do not run `gcloud`, enable paid services, or activate the old GCP deploy workflow unless the owner explicitly changes direction.
+- The current no-billing deployment candidate is Netlify Free plus Neon Free, for a demo or limited early pilot only. These tiers have strict quotas and do not provide production availability guarantees.
+- GitHub Actions deploys only from `main`, only after CI passes, and only when the repository variable `NETLIFY_DEPLOY_ENABLED` is `true`; the `production` GitHub environment must require approval and restrict deployments to `main`.
+- Provider projects, database, secrets, domain, and live deployment remain owner-controlled and are not provisioned from this workspace. Never ask the owner to paste secrets into chat.
+- Keep the prior Google Cloud Terraform and Cloud Run instructions as inactive reference. No cloud resources were created or changed from this workspace.
 
 ## Engineering rules
 - Work on a feature branch based on `main`; never commit directly to `main`.

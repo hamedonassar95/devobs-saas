@@ -18,6 +18,8 @@ RUN --mount=type=secret,id=npm-ca,target=/run/secrets/npm-ca,required=false \
   fi
 
 FROM base AS builder
+ENV NEXT_OUTPUT_STANDALONE=true \
+    DIRECT_URL=postgresql://localhost:5432/devobs_saas?schema=public
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN --mount=type=secret,id=npm-ca,target=/run/secrets/npm-ca,required=false \

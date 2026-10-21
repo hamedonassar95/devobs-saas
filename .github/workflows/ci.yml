@@ -37,6 +37,7 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://devobs_app:ci-password@localhost:5432/devobs_saas?schema=public
+      DIRECT_URL: postgresql://devobs_app:ci-password@localhost:5432/devobs_saas?schema=public
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -67,11 +68,57 @@ jobs:
       - name: Build migration job container
         run: docker build --target migrator --tag devobs-saas:migrator-ci .
 
-  deploy:
+  deploy-netlify:
+    name: Deploy production to Netlify
     needs: [node, verify]
-    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != '' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.NETLIFY_DEPLOY_ENABLED == 'true' }}
     permissions:
       contents: read
-      id-token: write
-    uses: ./.github/workflows/deploy-gcp.yml
-    secrets: inherit
+    environment: production
+    concurrency:
+      group: netlify-production-deployment
+      cancel-in-progress: false
+    env:
+      NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.NEON_DIRECT_URL }}
+      APP_URL: ${{ vars.APP_URL }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${NETLIFY_SITE_ID:?Set NETLIFY_SITE_ID in the production environment}"
+          : "${NETLIFY_AUTH_TOKEN:?Set NETLIFY_AUTH_TOKEN in the production environment secrets}"
+          : "${DATABASE_URL:?Set NEON_DATABASE_URL in the production environment secrets}"
+          : "${DIRECT_URL:?Set NEON_DIRECT_URL in the production environment secrets}"
+          : "${APP_URL:?Set APP_URL in the production environment variables}"
+          case "$APP_URL" in https://*) ;; *) echo "APP_URL must use HTTPS" >&2; exit 1 ;; esac
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build the production Netlify bundle
+        run: npx --yes --package=netlify-cli@27.14.0 netlify build --context production
+
+      - name: Apply database migrations
+        run: npm run db:migrate:deploy
+
+      - name: Publish production deploy
+        run: npx --yes --package=netlify-cli@27.14.0 netlify deploy --no-build --prod --message "GitHub Actions ${GITHUB_SHA}"
+
+      - name: Verify the live application and database
+        run: |
+          curl --fail --show-error --silent \
+            --retry 10 --retry-delay 6 --retry-connrefused \
+            "${APP_URL%/}/api/health"
