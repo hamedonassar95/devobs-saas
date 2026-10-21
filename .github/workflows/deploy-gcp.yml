@@ -170,7 +170,7 @@ jobs:
             --region "$GCP_REGION" \
             --image "$IMAGE" \
             --service-account "$GCP_RUNTIME_SERVICE_ACCOUNT" \
-            --set-secrets "DATABASE_URL=devobs-database-url:${GCP_DATABASE_URL_SECRET_VERSION}" \
+            --set-secrets "DATABASE_URL=devobs-database-url:${GCP_DATABASE_URL_SECRET_VERSION},DIRECT_URL=devobs-database-url:${GCP_DATABASE_URL_SECRET_VERSION}" \
             --max-retries 1 \
             --task-timeout 10m \
             --quiet \
