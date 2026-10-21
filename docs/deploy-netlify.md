@@ -11,19 +11,19 @@ This is the no-billing-account path for a demo or limited early pilot. It is not
 
 ## Published free-tier limits checked on October 21, 2026
 
-- Netlify's current Free plan is $0 with a 300-credit monthly hard limit and no auto-recharge. Projects pause when the account reaches its credit limit. A production deploy consumes credits, and build compute also counts, so repeated deployments can exhaust the allowance.
+- Netlify's current Free plan is $0 with a 300-credit monthly hard limit and no auto-recharge. Projects pause when the account reaches its credit limit. Each production deploy currently uses 15 credits; function compute and bandwidth also use credits, so repeated deployments and traffic can exhaust the allowance sooner.
 - Neon Free is $0/month without a credit card and currently includes 100 compute-hours and 1 GB of Postgres storage per project. Compute suspends when idle. This is a small database allowance; monitor usage and do not upgrade automatically.
 - Netlify states that Free can host commercial projects, but its free tier has no service-level commitment and its terms reserve the right to suspend or remove free projects. Use this as a demo/early-pilot setup only.
 - Stripe transaction processing and any paid Stripe account features are separate from hosting. Keep Stripe in test mode until prices, webhooks, support, backups, and an appropriate production hosting plan are deliberately set up.
 
-Provider references: [Netlify pricing](https://www.netlify.com/pricing/), [Netlify free-plan limits](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/credit-based-pricing-plans/), [Netlify Free commercial-project announcement](https://www.netlify.com/blog/introducing-netlify-free-plan/), [Neon pricing](https://neon.com/pricing), and [Neon Free plan limits](https://neon.com/blog/neon-free-plan-1-gb-per-project).
+Provider references: [Netlify pricing and credit use](https://www.netlify.com/pricing/), [Netlify free-plan limits](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/credit-based-pricing-plans/), [Netlify Free commercial-project announcement](https://www.netlify.com/blog/introducing-netlify-free-plan/), [Netlify Free-tier terms](https://www.netlify.com/legal/self-serve-subscription-agreement/), [Netlify private-by-default projects](https://www.netlify.com/changelog/2026-07-28-start-with-private-project-urls/), [Neon pricing](https://neon.com/pricing), [Neon service-level agreement](https://neon.com/sla), and [Neon Free plan limits](https://neon.com/blog/neon-free-plan-1-gb-per-project).
 
 ## 1. Create the provider projects
 
 1. Create a Netlify account and choose the **Free** plan. Do not enable a paid plan or credit auto-recharge.
-2. Create a Netlify project from the `hamedonassar95/devobs-saas` GitHub repository. Use `main` as the production branch. Netlify reads `netlify.toml` and `.nvmrc` from the repository.
-3. Create a Neon project and keep it on the **Free** plan. Do not attach a payment method or upgrade the plan. Create an application database role with `NOSUPERUSER NOBYPASSRLS` and a strong password. The app role must own the app schema (or have the privileges needed by Prisma migrations); do not use a database superuser for the application.
-4. In Neon, open **Connect** and copy two connection strings for that application role:
+2. Create a Netlify project from the `hamedonassar95/devobs-saas` GitHub repository. Use `main` as the production branch. Netlify reads `netlify.toml` and `.nvmrc` from the repository. New Free-plan projects can start private; before the first online deployment, set the project's visibility to public so visitors and the GitHub smoke test can reach the app.
+3. Create two separate Neon projects, `devobs-saas-prod` and `devobs-saas-preflight`, and keep both on the **Free** plan. Do not attach a payment method or upgrade either plan. Keep the preflight database synthetic and isolated; do not clone production customer data into it. Create an application database role with `NOSUPERUSER NOBYPASSRLS` and a strong password in each project. The app role must own the app schema (or have the privileges needed by Prisma migrations); do not use a database superuser for the application.
+4. In each Neon project, open **Connect** and copy two connection strings for that project's application role:
    - A **pooled** connection for `DATABASE_URL` (hostname contains `-pooler`).
    - A **direct/unpooled** connection for `DIRECT_URL`, used by Prisma migrations.
 
@@ -31,14 +31,16 @@ Keep the connection strings private. Do not paste them into chat, issues, or sou
 
 ## 2. Configure Netlify runtime variables
 
-In the Netlify project's environment-variable settings, set these for **Production**. On the Free plan, variables apply to all scopes by default; keep secrets out of `netlify.toml` and do not use a `NEXT_PUBLIC_` prefix.
+In the Netlify project's environment-variable settings, set the production values under the **Production** deploy context. Set a separate `DATABASE_URL` for the **Deploy Previews** context that points to the isolated `devobs-saas-preflight` Neon project. Do not put production credentials in Deploy Previews. On the Free plan, variables apply to all scopes by default; keep secrets out of `netlify.toml` and do not use a `NEXT_PUBLIC_` prefix.
 
 Required to use the application:
 
 | Variable | Value |
 | --- | --- |
-| `DATABASE_URL` | Neon pooled URL for the restricted application role |
+| `DATABASE_URL` | `devobs-saas-prod` pooled URL for the restricted application role |
 | `APP_URL` | The HTTPS Netlify project URL, such as `https://<project>.netlify.app` |
+
+For **Deploy Previews**, set `DATABASE_URL` to the pooled URL from `devobs-saas-preflight`. Do not configure Stripe credentials, production database URLs, or real customer data in the preview context.
 
 For billing and contact features, add these server-side values when those integrations are ready:
 
@@ -79,13 +81,15 @@ In **Settings → Environments → production**, retain required reviewers and a
 | `NETLIFY_AUTH_TOKEN` | Netlify personal access token |
 | `NEON_DATABASE_URL` | Same pooled connection as Netlify's `DATABASE_URL` |
 | `NEON_DIRECT_URL` | Same direct connection as Prisma's `DIRECT_URL` |
+| `NEON_PREVIEW_DATABASE_URL` | Pooled connection for `devobs-saas-preflight` |
+| `NEON_PREVIEW_DIRECT_URL` | Direct connection for `devobs-saas-preflight` |
 
 After importing the GitHub repository in Netlify, pause Netlify's automatic Git builds so they cannot publish around the GitHub `production` approval gate. GitHub Actions still performs manual CLI deploys when CI passes and a reviewer approves the `production` environment. Netlify documents that manual deploys are the way to update a project while automatic builds are stopped.
 
-The deploy job builds the production bundle once, applies pending Prisma migrations using the direct database URL, publishes the prebuilt bundle with the Netlify CLI, and checks `/api/health`. It runs only for a push or manual dispatch on `main`, and only when `NETLIFY_DEPLOY_ENABLED=true`. A failed migration or health check fails the job; database migrations are not automatically rolled back.
+The deploy job first checks that its commit is still the head of `main`, builds the production-context bundle once, migrates the isolated preflight database, publishes a draft candidate, and checks `/api/health` against that candidate. Only then does it recheck that the commit is current, migrate production, recheck freshness, and publish the same bundle. If the production health check fails, it asks Netlify to restore the previously published deploy and verifies the restored health endpoint. If the CLI reports a publish failure, the workflow still inspects the live health endpoint before failing, since the request may have succeeded before the CLI error. It runs only for a push or manual dispatch on `main`, and only when `NETLIFY_DEPLOY_ENABLED=true`. Database migrations are not automatically rolled back; production migrations must be backward-compatible with the prior app version.
 
 ## 4. Run the first deployment
 
-Once these provider settings and GitHub environment values are in place, push the reviewed changes to `main`. CI runs first. The Netlify deployment waits for the protected `production` approval, then runs after approval. Do not add real Stripe prices or enable live payments until a production-grade database backup and availability plan is in place.
+Once these provider settings and GitHub environment values are in place, push the reviewed changes to `main`. CI runs first. The Netlify deployment waits for the protected `production` approval, then runs after approval. Keep the Netlify project private until ready for public access; the candidate health check requires the draft deploy URL to be reachable by the workflow runner. Do not add real Stripe prices or enable live payments until a production-grade database backup and availability plan is in place.
 
 For local development, set `DATABASE_URL` and `DIRECT_URL` in `.env` to the same local Postgres connection, then use the existing Prisma scripts. `.env` is ignored by Git.
