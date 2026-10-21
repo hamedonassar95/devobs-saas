@@ -55,7 +55,7 @@ For billing and contact features, add these server-side values when those integr
 | `CONTACT_EMAIL` | Inbox receiving contact requests |
 | `CONTACT_FROM_EMAIL` | Sender verified with Resend |
 
-Keep the optional Cloudflare Workers AI integration disabled unless its own free-plan limits and account configuration are verified. No model is called by the Netlify deploy workflow.
+Keep the optional Cloudflare Workers AI integration disabled unless its own free-plan limits and account configuration are verified. No model is called by the Netlify deploy workflow. To configure and operate it after deployment, follow [the AI integration runbook](./ai-integration-runbook.md); the current app exposes AI settings and alert analysis through authenticated API routes, without a customer-facing AI dashboard.
 
 ## 3. Configure the protected GitHub deployment
 
