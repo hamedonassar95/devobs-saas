@@ -97,14 +97,28 @@ jobs:
 
       - name: Validate deployment configuration
         shell: bash
+        env:
+          NEON_PREVIEW_DATABASE_URL: ${{ secrets.NEON_PREVIEW_DATABASE_URL }}
+          NEON_PREVIEW_DIRECT_URL: ${{ secrets.NEON_PREVIEW_DIRECT_URL }}
         run: |
           set -euo pipefail
           : "${NETLIFY_SITE_ID:?Set NETLIFY_SITE_ID in the production environment}"
           : "${NETLIFY_AUTH_TOKEN:?Set NETLIFY_AUTH_TOKEN in the production environment secrets}"
           : "${DATABASE_URL:?Set NEON_DATABASE_URL in the production environment secrets}"
           : "${DIRECT_URL:?Set NEON_DIRECT_URL in the production environment secrets}"
+          : "${NEON_PREVIEW_DATABASE_URL:?Set NEON_PREVIEW_DATABASE_URL in the production environment secrets}"
+          : "${NEON_PREVIEW_DIRECT_URL:?Set NEON_PREVIEW_DIRECT_URL in the production environment secrets}"
           : "${APP_URL:?Set APP_URL in the production environment variables}"
           case "$APP_URL" in https://*) ;; *) echo "APP_URL must use HTTPS" >&2; exit 1 ;; esac
+
+      - name: Check that this revision is still the head of main
+        run: |
+          set -euo pipefail
+          main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
+            echo "Refusing stale deployment: main is $main_sha, this run is $GITHUB_SHA" >&2
+            exit 1
+          fi
 
       - name: Install locked dependencies
         run: npm ci
@@ -112,14 +126,111 @@ jobs:
       - name: Build the production Netlify bundle
         run: npx --yes --package=netlify-cli@27.14.0 netlify build --context production
 
-      - name: Apply database migrations
+      - name: Check revision before migrating the preflight database
+        run: |
+          set -euo pipefail
+          main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
+            echo "Refusing stale preflight: main is $main_sha, this run is $GITHUB_SHA" >&2
+            exit 1
+          fi
+
+      - name: Migrate the isolated preflight database
+        env:
+          DATABASE_URL: ${{ secrets.NEON_PREVIEW_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.NEON_PREVIEW_DIRECT_URL }}
         run: npm run db:migrate:deploy
 
-      - name: Publish production deploy
+      - name: Deploy a draft candidate
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          alias="preflight-${GITHUB_SHA:0:7}"
+          deploy_json="$(npx --yes --package=netlify-cli@27.14.0 netlify deploy \
+            --no-build --json --alias="$alias" \
+            --message="Preflight ${GITHUB_SHA}")"
+          deploy_url="$(jq -er '.deploy_ssl_url // .deploy_url // .url' <<< "$deploy_json")"
+          case "$deploy_url" in https://*) ;; *) echo "Draft deploy did not return an HTTPS URL" >&2; exit 1 ;; esac
+          echo "url=$deploy_url" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the candidate against the preflight database
+        run: |
+          curl --fail --show-error --silent \
+            --retry 10 --retry-delay 6 --retry-connrefused \
+            "${{ steps.candidate.outputs.url }}/api/health"
+
+      - name: Check revision before migrating production
+        run: |
+          set -euo pipefail
+          main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
+            echo "Refusing stale production migration: main is $main_sha, this run is $GITHUB_SHA" >&2
+            exit 1
+          fi
+
+      - name: Apply production database migrations
+        run: npm run db:migrate:deploy
+
+      - name: Record current production deploy for rollback
+        id: previous
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploys="$(curl --fail --show-error --silent \
+            --header "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
+            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}/deploys?latest-published=true")"
+          deploy_id="$(jq -r '.[0].id // empty' <<< "$deploys")"
+          echo "id=$deploy_id" >> "$GITHUB_OUTPUT"
+
+      - name: Check revision before publishing production
+        run: |
+          set -euo pipefail
+          main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
+            echo "Refusing stale production publish: main is $main_sha, this run is $GITHUB_SHA" >&2
+            exit 1
+          fi
+
+      - name: Publish the verified bundle to production
+        id: production_publish
+        continue-on-error: true
         run: npx --yes --package=netlify-cli@27.14.0 netlify deploy --no-build --prod --message "GitHub Actions ${GITHUB_SHA}"
 
       - name: Verify the live application and database
+        id: live_health
+        continue-on-error: true
         run: |
           curl --fail --show-error --silent \
             --retry 10 --retry-delay 6 --retry-connrefused \
             "${APP_URL%/}/api/health"
+
+      - name: Restore the previous production deploy if health verification fails
+        if: ${{ steps.live_health.outcome == 'failure' && steps.previous.outputs.id != '' }}
+        run: |
+          curl --fail --show-error --silent --request POST \
+            --header "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
+            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}/deploys/${{ steps.previous.outputs.id }}/restore" \
+            >/dev/null
+
+      - name: Verify restored production health
+        if: ${{ steps.live_health.outcome == 'failure' && steps.previous.outputs.id != '' }}
+        run: |
+          curl --fail --show-error --silent \
+            --retry 10 --retry-delay 6 --retry-connrefused \
+            "${APP_URL%/}/api/health"
+
+      - name: Fail this workflow when the production health check failed
+        if: ${{ always() && (steps.production_publish.outcome == 'failure' || steps.live_health.outcome == 'failure') }}
+        run: |
+          if [[ "${{ steps.production_publish.outcome }}" == "failure" ]]; then
+            echo "The Netlify production publish command failed; inspect the deploy state even if the health check passed." >&2
+          fi
+          if [[ "${{ steps.live_health.outcome }}" == "failure" ]]; then
+            if [[ -z "${{ steps.previous.outputs.id }}" ]]; then
+              echo "The new deployment failed health verification and no previous production deploy was available to restore." >&2
+            else
+              echo "The new deployment failed health verification; a rollback was requested." >&2
+            fi
+          fi
+          exit 1

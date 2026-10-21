@@ -29,6 +29,7 @@ Tenant-aware foundations are implemented on `main`:
 - The original Google Cloud Run route is paused by the owner because the target project has no billing account. Do not run `gcloud`, enable paid services, or activate the old GCP deploy workflow unless the owner explicitly changes direction.
 - The current no-billing deployment candidate is Netlify Free plus Neon Free, for a demo or limited early pilot only. These tiers have strict quotas and do not provide production availability guarantees.
 - GitHub Actions deploys only from `main`, only after CI passes, and only when the repository variable `NETLIFY_DEPLOY_ENABLED` is `true`; the `production` GitHub environment must require approval and restrict deployments to `main`.
+- Before production migrations and publishing, the workflow checks that its commit is still the head of `main`. It migrates an isolated Neon preflight project, publishes a Netlify draft, verifies `/api/health`, then applies production migrations and publishes the same bundle. If live health verification fails, it restores the previous Netlify deploy when one exists. Database migrations are not automatically rolled back and must remain compatible with the previous application revision.
 - Provider projects, database, secrets, domain, and live deployment remain owner-controlled and are not provisioned from this workspace. Never ask the owner to paste secrets into chat.
 - Keep the prior Google Cloud Terraform and Cloud Run instructions as inactive reference. No cloud resources were created or changed from this workspace.
 
