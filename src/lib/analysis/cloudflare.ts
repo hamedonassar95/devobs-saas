@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, type AiTokenUsage } from "@/lib/analysis/usage";
+import { containsUnsafeMutationAdvice } from "./output-safety.mjs";
 
 export const CLOUDFLARE_ANALYSIS_MODEL_ID = "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8";
 const CLOUDFLARE_MODEL_PATH = "@cf/meta/llama-3.1-8b-instruct-fp8";
@@ -29,6 +30,13 @@ export type CloudflareAnalysis = {
     note: string;
   };
 };
+
+export class UnsafeCloudflareAnalysisError extends Error {
+  constructor() {
+    super("Cloudflare Workers AI returned high-risk advice");
+    this.name = "UnsafeCloudflareAnalysisError";
+  }
+}
 
 type CloudflareConfig = {
   accountId: string;
@@ -172,9 +180,11 @@ export async function analyzeAlertWithCloudflare(
   if (!text) throw new Error("Cloudflare Workers AI returned an invalid response");
   const parsed = parseModelOutput(text);
   if (!parsed.success) throw new Error("Cloudflare Workers AI returned an invalid analysis");
+  const outputText = [parsed.data.summary, parsed.data.likelyCause, ...parsed.data.nextSteps].join("\n");
+  if (containsUnsafeMutationAdvice(outputText)) throw new UnsafeCloudflareAnalysisError();
 
   return {
-    summary: parsed.data.summary,
+    summary: redactAlertText(parsed.data.summary),
     tokenUsage: extractTokenUsage(body),
     details: {
       engine: "cloudflare-workers-ai",
@@ -182,9 +192,9 @@ export async function analyzeAlertWithCloudflare(
       severity: alert.severity,
       status: alert.status,
       sourceProvider: alert.sourceProvider ?? null,
-      likelyCause: parsed.data.likelyCause,
+      likelyCause: redactAlertText(parsed.data.likelyCause),
       confidence: parsed.data.confidence,
-      nextSteps: parsed.data.nextSteps,
+      nextSteps: parsed.data.nextSteps.map(redactAlertText),
       note: "AI-generated advisory only. Verify evidence and have a human review before any production change.",
     },
   };

@@ -2,6 +2,7 @@ import {
   analyzeAlertWithCloudflare,
   CLOUDFLARE_ANALYSIS_MODEL_ID,
   getCloudflareWorkersAiConfig,
+  UnsafeCloudflareAnalysisError,
   type AlertForAiAnalysis,
   type CloudflareAnalysis,
   type CloudflareEnvironment,
@@ -70,14 +71,17 @@ export async function analyzeAlert(
         tokenUsage,
       },
     };
-  } catch {
+  } catch (error) {
+    const outputRejected = error instanceof UnsafeCloudflareAnalysisError;
     return {
       ...local,
       model: "local-rules-fallback",
       providerCall: { attempted: true, outcome: "failed", durationMs: Math.max(0, Date.now() - startedAt), tokenUsage: null },
       details: {
         ...local.details,
-        note: "Cloudflare Workers AI was unavailable. Deterministic local guidance is returned; no provider retry was made.",
+        note: outputRejected
+          ? "Cloudflare Workers AI output failed the local high-risk advice check. The response was discarded and deterministic local guidance was returned; no provider retry was made."
+          : "Cloudflare Workers AI was unavailable. Deterministic local guidance is returned; no provider retry was made.",
       },
     };
   }
