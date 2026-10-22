@@ -58,7 +58,7 @@ The contact form sends messages through Resend. Set `RESEND_API_KEY`, `CONTACT_E
 
 > **Paused:** Google Cloud has no billing account linked, and the owner asked to use a no-billing alternative. CI no longer invokes the Cloud Run deployment workflow. Keep the GCP instructions below as inactive reference only; do not enable or run them unless the owner chooses that path later.
 
-The current deployment candidate is [Netlify Free + Neon Free](docs/deploy-netlify.md), intended only for a demo or limited early pilot because these tiers do not provide production availability guarantees. The owner shared a screenshot showing a public Netlify deployment at [courageous-croissant-3e58f9.netlify.app](https://courageous-croissant-3e58f9.netlify.app); the app's current health, sign-in, database connection, and environment settings have not been independently verified from this workspace.
+The current deployment candidate is [Netlify Free + Neon Free](docs/deploy-netlify.md), intended only for a demo or limited early pilot because these tiers do not provide production availability guarantees. As of October 22, 2026, the public homepage returned HTTP 200 but `/api/health` returned HTTP 503. The health response means the deployed PostgreSQL probe failed; its cause has not been established. The latest `main` CI passed, but the Netlify deploy job was skipped. Customer sign-in and workflows have not been tested.
 
 ### Inactive Google Cloud reference
 
@@ -157,4 +157,4 @@ Finally, configure the Stripe webhook URL as `https://<domain>/api/billing/webho
 
 ### Deployment status
 
-The owner shared a screenshot showing the public Netlify site [courageous-croissant-3e58f9.netlify.app](https://courageous-croissant-3e58f9.netlify.app). This workspace has not accessed the owner's provider accounts or independently verified the live health endpoint, customer sign-in, database connection, or environment settings. The Google Cloud path remains inactive because its project is not linked to billing.
+As of October 22, 2026, the public homepage returns HTTP 200 and `/api/health` returns HTTP 503. The latest `main` CI is successful, but its Netlify deploy job was skipped. The health response does not reveal the database failure cause, and no customer sign-in or workflow was tested. Provider environment values and credentials remain owner-controlled; this workspace has not read or changed them. The Google Cloud path remains inactive because its project is not linked to billing.
