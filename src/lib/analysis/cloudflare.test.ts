@@ -115,6 +115,74 @@ describe("Cloudflare Workers AI alert analysis", () => {
     expect(result.tokenUsage).toEqual({ promptTokens: 240, completionTokens: 42 });
   });
 
+  it("rejects high-risk mutation advice even when the model output is valid JSON", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      result: {
+        response: JSON.stringify({
+          summary: "The service is unhealthy.",
+          likelyCause: "The deployment may have introduced a regression.",
+          confidence: "medium",
+          nextSteps: ["Run kubectl delete pods in production now."],
+        }),
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await expect(analyzeAlertWithCloudflare(alert, config, fetcher)).rejects.toThrow("high-risk advice");
+  });
+
+  it("does not let an unrelated negation excuse later high-risk advice", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      result: {
+        response: JSON.stringify({
+          summary: "The service is unhealthy.",
+          likelyCause: "The deployment may have introduced a regression.",
+          confidence: "medium",
+          nextSteps: ["Do not run the deletion. Run kubectl delete pods in production now."],
+        }),
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await expect(analyzeAlertWithCloudflare(alert, config, fetcher)).rejects.toThrow("high-risk advice");
+  });
+
+  it("allows a clearly negated high-risk command in an advisory warning", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      result: {
+        response: JSON.stringify({
+          summary: "The service is unhealthy.",
+          likelyCause: "The deployment may have introduced a regression.",
+          confidence: "medium",
+          nextSteps: ["Do not run kubectl delete in production; inspect pod events first."],
+        }),
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    const result = await analyzeAlertWithCloudflare(alert, config, fetcher);
+
+    expect(result.details.nextSteps[0]).toContain("Do not run kubectl delete");
+  });
+
+  it("redacts known credentials and email addresses echoed in model output", async () => {
+    const credential = `sk_live_${"s".repeat(24)}`;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      result: {
+        response: JSON.stringify({
+          summary: `The exposed credential was ${credential}.`,
+          likelyCause: "Contact admin@example.com to confirm ownership.",
+          confidence: "low",
+          nextSteps: ["Review the affected service logs."],
+        }),
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    const result = await analyzeAlertWithCloudflare(alert, config, fetcher);
+
+    expect(result.summary).not.toContain(credential);
+    expect(result.summary).toContain("[REDACTED_SECRET]");
+    expect(result.details.likelyCause).not.toContain("admin@example.com");
+    expect(result.details.likelyCause).toContain("[REDACTED_EMAIL]");
+  });
+
   it("ignores missing or malformed optional usage without rejecting a valid analysis", async () => {
     for (const usage of [undefined, { prompt_tokens: -1, completion_tokens: 1 }, { prompt_tokens: 2, completion_tokens: 3, total_tokens: 99 }]) {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({

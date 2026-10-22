@@ -51,6 +51,20 @@ patterns, advisory notes, and optional provider-only runs. These checks are
 intentionally deterministic, but lexical evidence and danger-pattern checks
 can miss semantic errors and may need expert tuning.
 
+At runtime, the Cloudflare adapter applies the same bounded high-risk pattern
+checks to `summary`, `likelyCause`, and `nextSteps` before saving a model result.
+If a match is not explicitly negated in the same sentence, the model result is
+discarded and deterministic local guidance is returned without a retry. Known
+credential and email patterns are also redacted from those output fields before
+they are saved. This is a narrow defense-in-depth filter; it cannot establish
+that all remaining model text is safe or correct.
+
+Cloudflare's JSON Mode is not enabled for the pinned model. The current JSON
+Mode support list does not name `@cf/meta/llama-3.1-8b-instruct-fp8`, so the
+adapter continues to parse the model's string response and validate it with
+the local schema. Revisit this only after Cloudflare documents support for the
+exact model ID.
+
 All checked-in examples are synthetic and unreviewed. Passing this smoke suite
 does **not** establish accuracy, confidence calibration, safety, ROI, or
 production readiness. To measure quality, add representative redacted alerts

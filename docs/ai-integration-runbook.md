@@ -6,7 +6,7 @@ This runbook configures the existing optional alert-triage integration for the N
 
 - Alert analysis uses Cloudflare Workers AI with the pinned model `@cf/meta/llama-3.1-8b-instruct-fp8`.
 - AI is off unless the provider switches, account ID, API token, and valid request caps are configured on the server. Each organization must also opt in, and the request must pass the Full-plan entitlement check.
-- Alert text is redacted and length-limited before it is sent. The model is instructed to treat alert text as untrusted and return advisory JSON; it cannot run commands or change infrastructure. Redaction is pattern-based and is not a guarantee that every secret will be removed.
+- Alert text is redacted and length-limited before it is sent. Model output is schema-validated, checked against a small set of high-risk mutation patterns, and redacted for known credential and email patterns before it is saved. A match causes the model result to be discarded in favor of deterministic local guidance without a retry. These pattern checks cannot guarantee all advice is safe or accurate; the model has no tools and cannot change infrastructure.
 - Daily requests are capped at five per organization and ten for the whole app by default. Results are reused until the alert changes. Failed provider requests use deterministic local guidance; hitting a cap also returns local guidance.
 - A signed-in member can open `/dashboard/ai` to review provider readiness and usage, inspect recent alerts, request advisory analysis, and view saved results. Owners/admins can change the organization opt-in; owners, admins, and members can request analysis. The API remains the authorization boundary.
 - Monitoring-source creation is still API-managed. The webhook credential is returned once and is not shown again, so store it in the monitoring provider when creating the source.
@@ -112,6 +112,7 @@ Cloudflare's current data-use documentation says standard stateless inference in
 - **Enable returns HTTP 503**: the application-level Workers AI configuration is incomplete or the free-plan attestation/switch is off.
 - **Enable returns HTTP 402**: the organization does not currently have the Full-plan entitlement required for analysis.
 - **Analysis returns local guidance**: check app switches, organization opt-in, request limits, and Cloudflare usage/errors. Local guidance is expected fallback behavior.
+- **Analysis falls back after a model response**: a malformed response or output matching a configured high-risk mutation pattern is discarded. The app records a failed provider outcome and returns local guidance without retrying.
 - **401/403**: sign in as an organization member with the required read/write permission. Only an OWNER/ADMIN can change the organization opt-in.
 - **AI controls are missing**: sign in to a registered SaaS account and open `/dashboard/ai`. The page is included in this source revision; check the deployed revision if the route is missing. Monitoring-source creation remains API-managed.
 

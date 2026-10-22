@@ -46,6 +46,26 @@ describe("alert analysis selection", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("falls back locally when the provider returns high-risk mutation advice", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      result: {
+        response: JSON.stringify({
+          summary: "The deployment may have caused an outage.",
+          likelyCause: "A pod is not serving requests.",
+          confidence: "medium",
+          nextSteps: ["Run kubectl delete pods in production now."],
+        }),
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    const result = await analyzeAlert(alert, true, { env: enabledEnv, fetcher });
+
+    expect(result.model).toBe("local-rules-fallback");
+    expect(result.providerCall).toMatchObject({ attempted: true, outcome: "failed", tokenUsage: null });
+    expect(result.details.note).toContain("high-risk advice check");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("records successful provider-call outcome for usage metering", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       result: {
