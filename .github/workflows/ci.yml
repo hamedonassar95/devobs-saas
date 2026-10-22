@@ -141,14 +141,17 @@ jobs:
           DIRECT_URL: ${{ secrets.NEON_PREVIEW_DIRECT_URL }}
         run: npm run db:migrate:deploy
 
-      - name: Deploy a draft candidate
+      - name: Deploy a draft candidate with the isolated preflight database
         id: candidate
         shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.NEON_PREVIEW_DATABASE_URL }}
         run: |
           set -euo pipefail
           alias="preflight-${GITHUB_SHA:0:7}"
           deploy_json="$(npx --yes --package=netlify-cli@27.14.0 netlify deploy \
             --no-build --json --alias="$alias" \
+            --secret-env "DATABASE_URL=$DATABASE_URL" \
             --message="Preflight ${GITHUB_SHA}")"
           deploy_url="$(jq -er '.deploy_ssl_url // .deploy_url // .url' <<< "$deploy_json")"
           case "$deploy_url" in https://*) ;; *) echo "Draft deploy did not return an HTTPS URL" >&2; exit 1 ;; esac
@@ -192,10 +195,16 @@ jobs:
             exit 1
           fi
 
-      - name: Publish the verified bundle to production
+      - name: Publish the verified bundle with the production database
         id: production_publish
         continue-on-error: true
-        run: npx --yes --package=netlify-cli@27.14.0 netlify deploy --no-build --prod --message "GitHub Actions ${GITHUB_SHA}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes --package=netlify-cli@27.14.0 netlify deploy \
+            --no-build --prod \
+            --secret-env "DATABASE_URL=$DATABASE_URL" \
+            --message "GitHub Actions ${GITHUB_SHA}"
 
       - name: Verify the live application and database
         id: live_health
