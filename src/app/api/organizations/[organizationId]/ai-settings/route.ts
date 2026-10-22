@@ -1,9 +1,11 @@
+import { SubscriptionStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
 import { CLOUDFLARE_ANALYSIS_MODEL_ID, isCloudflareWorkersAiConfigured, isCloudflareWorkersAiFreePlanConfirmed } from "@/lib/analysis/cloudflare";
 import { CLOUDFLARE_AI_PRICING_CHECKED_ON, getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, getUtcDayStart, summarizeAiCostEstimate } from "@/lib/analysis/usage";
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
+import { planIncludesFeature } from "@/lib/billing/plans";
 import { TenantAccessError, TenantPermissionError, requireTenantContextForPermission, withTenantTransaction } from "@/lib/tenant/access";
 
 type RouteContext = { params: Promise<{ organizationId: string }> };
@@ -17,7 +19,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const now = new Date();
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-    const { setting, usage, monthUsage } = await withTenantTransaction(tenant, async (tx) => {
+    const { setting, usage, monthUsage, hasAiPlan } = await withTenantTransaction(tenant, async (tx) => {
       const setting = await tx.organization.findUnique({
         where: { id: tenant.organizationId },
         select: { aiAnalysisEnabled: true },
@@ -38,7 +40,16 @@ export async function GET(_request: Request, context: RouteContext) {
           estimatedCostNanoUsd: true,
         },
       });
-      return { setting, usage, monthUsage: monthUsage._sum };
+      const subscription = await tx.subscription.findFirst({
+        where: {
+          organizationId: tenant.organizationId,
+          status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+        },
+        orderBy: { updatedAt: "desc" },
+        select: { plan: true },
+      });
+      const hasAiPlan = subscription !== null && planIncludesFeature(subscription.plan, "ai");
+      return { setting, usage, monthUsage: monthUsage._sum, hasAiPlan };
     });
     if (!setting) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     const outcomes = (usage?.succeeded ?? 0) + (usage?.failed ?? 0);
@@ -55,6 +66,7 @@ export async function GET(_request: Request, context: RouteContext) {
     );
     return NextResponse.json({
       enabled: setting.aiAnalysisEnabled,
+      hasAiPlan,
       providerAvailable: isCloudflareWorkersAiConfigured(),
       provider: "Cloudflare Workers AI",
       freePlanConfirmed: isCloudflareWorkersAiFreePlanConfirmed(),

@@ -42,6 +42,8 @@ The provider API supports read-only GitHub Actions, GitLab.com, and Bitbucket Cl
 
 For local development, `CLOUDFLARE_WORKERS_AI_ENABLED` and `CLOUDFLARE_WORKERS_AI_FREE_PLAN_CONFIRMED` default to `false`, and the Cloudflare account ID/token are blank. To use the model, the operator must verify that the provider account is on Workers Free, set the confirmation flag, configure the server-side provider token, and then enable the global flag. The app caps requests at five per organization and ten across the app per UTC day by default. These are request limits, not dollar budgets. An organization owner/admin can inspect `GET /api/organizations/{organizationId}/ai-settings` and enable analysis with `PATCH` and `{"enabled":true}`. The organization must have an active or trialing Full plan. Alert analysis stays local until both the global provider configuration and the organization opt-in are enabled. See [provider costs and setup](docs/provider-costs.md) for quotas, limits, monthly usage, and data handling.
 
+Signed-in customers can use `/dashboard/ai` to review provider availability and usage, manage the organization opt-in, and request advisory analysis for recent alerts. Alert source creation remains API-managed; the AI dashboard does not configure Alertmanager or Grafana webhooks.
+
 See [provider costs and setup](docs/provider-costs.md) for current official pricing references, API examples, and costs that remain outside the app, including Cloud Run, PostgreSQL, and customer CI/monitoring infrastructure.
 
 The offline [AI alert-analysis evaluation](docs/AI_EVALUATION.md) covers the SaaS response contract with synthetic cases and makes no provider calls. Its source-derived scenarios are unreviewed and do not establish model quality or production readiness.
@@ -56,7 +58,7 @@ The contact form sends messages through Resend. Set `RESEND_API_KEY`, `CONTACT_E
 
 > **Paused:** Google Cloud has no billing account linked, and the owner asked to use a no-billing alternative. CI no longer invokes the Cloud Run deployment workflow. Keep the GCP instructions below as inactive reference only; do not enable or run them unless the owner chooses that path later.
 
-The current deployment candidate is [Netlify Free + Neon Free](docs/deploy-netlify.md), intended only for a demo or limited early pilot because these tiers do not provide production availability guarantees. The source configuration is in place, but no provider projects, database, secrets, or deploy have been created yet.
+The current deployment candidate is [Netlify Free + Neon Free](docs/deploy-netlify.md), intended only for a demo or limited early pilot because these tiers do not provide production availability guarantees. The owner shared a screenshot showing a public Netlify deployment at [courageous-croissant-3e58f9.netlify.app](https://courageous-croissant-3e58f9.netlify.app); the app's current health, sign-in, database connection, and environment settings have not been independently verified from this workspace.
 
 ### Inactive Google Cloud reference
 
@@ -155,4 +157,4 @@ Finally, configure the Stripe webhook URL as `https://<domain>/api/billing/webho
 
 ### Deployment status
 
-The current Netlify + Neon path is configuration only. Provider projects, database, secrets, and deployment still require the owner to configure the accounts described in [the deployment guide](docs/deploy-netlify.md). No service has been deployed from this environment. The Google Cloud path remains inactive because its project is not linked to billing.
+The owner shared a screenshot showing the public Netlify site [courageous-croissant-3e58f9.netlify.app](https://courageous-croissant-3e58f9.netlify.app). This workspace has not accessed the owner's provider accounts or independently verified the live health endpoint, customer sign-in, database connection, or environment settings. The Google Cloud path remains inactive because its project is not linked to billing.

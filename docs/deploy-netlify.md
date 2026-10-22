@@ -5,7 +5,7 @@ This is the no-billing-account path for a demo or limited early pilot. It is not
 ## Current status
 
 - The repository has a Netlify build configuration and a GitHub Actions deploy job that waits for CI and the protected `production` environment.
-- No Netlify project, Neon database, credentials, or live deployment has been created from this workspace.
+- The owner shared a Netlify console screenshot showing a public deployment at [courageous-croissant-3e58f9.netlify.app](https://courageous-croissant-3e58f9.netlify.app). This workspace has not independently checked its health, sign-in, database connection, or environment variables; verify those in the provider consoles and with the app's health endpoint.
 - Google Cloud deployment is paused because the target project has no billing account. The existing Terraform and Cloud Run workflow are retained as inactive reference; CI no longer calls that deployment workflow.
 - The first Neon migration initializes an empty database. It does not copy or migrate data from another environment.
 
@@ -55,7 +55,7 @@ For billing and contact features, add these server-side values when those integr
 | `CONTACT_EMAIL` | Inbox receiving contact requests |
 | `CONTACT_FROM_EMAIL` | Sender verified with Resend |
 
-Keep the optional Cloudflare Workers AI integration disabled unless its own free-plan limits and account configuration are verified. No model is called by the Netlify deploy workflow. To configure and operate it after deployment, follow [the AI integration runbook](./ai-integration-runbook.md); the current app exposes AI settings and alert analysis through authenticated API routes, without a customer-facing AI dashboard.
+Keep the optional Cloudflare Workers AI integration disabled unless its own free-plan limits and account configuration are verified. No model is called by the Netlify deploy workflow. To configure and operate it after deployment, follow [the AI integration runbook](./ai-integration-runbook.md); signed-in customers use `/dashboard/ai` for provider status, organization opt-in, alert analysis, and usage estimates. Monitoring-source creation remains API-managed.
 
 ## 3. Configure the protected GitHub deployment
 

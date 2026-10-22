@@ -12,9 +12,9 @@ export type AiTokenUsage = {
   completionTokens: number;
 };
 
-// Cloudflare model-page rates checked on 2026-10-20 for the pinned model.
+// Cloudflare model-page rates checked on 2026-10-22 for the pinned model.
 // Nano-USD keeps the per-token estimate exact without floating-point writes.
-export const CLOUDFLARE_AI_PRICING_CHECKED_ON = "2026-10-20";
+export const CLOUDFLARE_AI_PRICING_CHECKED_ON = "2026-10-22";
 const CLOUDFLARE_INPUT_NANO_USD_PER_TOKEN = 152;
 const CLOUDFLARE_OUTPUT_NANO_USD_PER_TOKEN = 287;
 
