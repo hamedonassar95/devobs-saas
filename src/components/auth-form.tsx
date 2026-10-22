@@ -25,7 +25,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         setError(result.error ?? "Unable to sign in.");
         return;
       }
-      router.replace(mode === "register" ? "/billing" : "/");
+      router.replace(mode === "register" ? "/billing" : "/dashboard/ai");
       router.refresh();
     } catch {
       setError("Unable to connect. Check your connection and try again.");
