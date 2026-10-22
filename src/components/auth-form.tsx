@@ -22,7 +22,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       });
       const result: { error?: string } = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(result.error ?? "Unable to sign in.");
+        setError(result.error ?? (mode === "register" ? "Unable to create your account. Please try again." : "Unable to sign in. Please try again."));
         return;
       }
       router.replace(mode === "register" ? "/billing" : "/dashboard/ai");
@@ -35,15 +35,27 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   }
 
   return (
-    <form onSubmit={submit}>
+    <form className="auth-form" onSubmit={submit} aria-busy={busy}>
       {mode === "register" && <>
-        <label>Name <input name="name" autoComplete="name" required maxLength={100} /></label>
-        <label>Organization <input name="organizationName" required minLength={2} maxLength={100} /></label>
+        <label className="auth-field">
+          <span>Name</span>
+          <input className="auth-input" name="name" autoComplete="name" required maxLength={100} />
+        </label>
+        <label className="auth-field">
+          <span>Organization</span>
+          <input className="auth-input" name="organizationName" autoComplete="organization" required minLength={2} maxLength={100} />
+        </label>
       </>}
-      <label>Email <input name="email" type="email" autoComplete="email" required maxLength={254} /></label>
-      <label>Password <input name="password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={12} maxLength={128} /></label>
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
+      <label className="auth-field">
+        <span>Email</span>
+        <input className="auth-input" name="email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} required maxLength={254} />
+      </label>
+      <label className="auth-field">
+        <span>Password</span>
+        <input className="auth-input" name="password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={12} maxLength={72} />
+      </label>
+      {error && <p className="auth-error" role="alert" aria-live="polite">{error}</p>}
+      <button className="auth-submit" type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
     </form>
   );
 }
