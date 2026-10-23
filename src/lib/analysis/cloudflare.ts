@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, type AiTokenUsage } from "@/lib/analysis/usage";
+import { buildAlertEvidenceScope, type AlertEvidenceInput } from "./evidence";
 import { containsUnsafeMutationAdvice } from "./output-safety.mjs";
 
 export const CLOUDFLARE_ANALYSIS_MODEL_ID = "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8";
@@ -7,13 +8,7 @@ const CLOUDFLARE_MODEL_PATH = "@cf/meta/llama-3.1-8b-instruct-fp8";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_ALERT_TEXT_LENGTH = 1_500;
 
-export type AlertForAiAnalysis = {
-  title: string;
-  description: string | null;
-  severity: "INFO" | "WARNING" | "CRITICAL";
-  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
-  sourceProvider?: "PROMETHEUS" | "GRAFANA" | null;
-};
+export type AlertForAiAnalysis = AlertEvidenceInput;
 
 export type CloudflareAnalysis = {
   summary: string;
@@ -24,6 +19,7 @@ export type CloudflareAnalysis = {
     severity: AlertForAiAnalysis["severity"];
     status: AlertForAiAnalysis["status"];
     sourceProvider: NonNullable<AlertForAiAnalysis["sourceProvider"]> | null;
+    evidenceScope: ReturnType<typeof buildAlertEvidenceScope>;
     likelyCause: string;
     confidence: "low" | "medium" | "high";
     nextSteps: string[];
@@ -194,6 +190,7 @@ export async function analyzeAlertWithCloudflare(
       severity: alert.severity,
       status: alert.status,
       sourceProvider: alert.sourceProvider ?? null,
+      evidenceScope: buildAlertEvidenceScope(alert),
       likelyCause: redactAlertText(parsed.data.likelyCause),
       confidence: parsed.data.confidence === "high" ? "medium" : parsed.data.confidence,
       nextSteps: parsed.data.nextSteps.map(redactAlertText),

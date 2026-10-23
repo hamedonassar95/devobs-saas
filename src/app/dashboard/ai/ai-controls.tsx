@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getAiDashboardAccess } from "@/lib/analysis/dashboard-access";
+import {
+  ALERT_EVIDENCE_FIELD_LABELS,
+  isAlertEvidenceScope,
+  MISSING_SIGNAL_LABELS,
+} from "@/lib/analysis/evidence";
 
 type Organization = { id: string; name: string; role: string };
 type UsageWindow = {
@@ -86,7 +91,7 @@ function formatCoverage(value: number | null): string {
 }
 
 function analysisDetails(value: unknown) {
-  if (!isRecord(value)) return { likelyCause: null, confidence: null, nextSteps: [], note: null };
+  if (!isRecord(value)) return { likelyCause: null, confidence: null, nextSteps: [], note: null, evidenceScope: null };
   return {
     likelyCause: typeof value.likelyCause === "string" ? value.likelyCause : null,
     confidence: typeof value.confidence === "string" ? value.confidence : null,
@@ -94,6 +99,7 @@ function analysisDetails(value: unknown) {
       ? value.nextSteps.filter((step): step is string => typeof step === "string")
       : [],
     note: typeof value.note === "string" ? value.note : null,
+    evidenceScope: isAlertEvidenceScope(value.evidenceScope) ? value.evidenceScope : null,
   };
 }
 
@@ -398,6 +404,22 @@ export default function AiControls({ organizations }: { organizations: Organizat
                           {details.likelyCause && <p><strong>Possible cause:</strong> {details.likelyCause}</p>}
                           {details.confidence && <p><strong>Confidence:</strong> {details.confidence}</p>}
                           {details.nextSteps.length > 0 && <ul>{details.nextSteps.map((step, index) => <li key={`${analysis.id}-${index}`}>{step}</li>)}</ul>}
+                          {details.evidenceScope ? (
+                            <section className="ai-evidence-scope" aria-label="Analysis evidence scope">
+                              <h4>Evidence scope</h4>
+                              <div className="ai-evidence-scope-grid">
+                                <div>
+                                  <strong>Available alert fields</strong>
+                                  <ul>{details.evidenceScope.availableFields.map((field) => <li key={field}>{ALERT_EVIDENCE_FIELD_LABELS[field]}</li>)}</ul>
+                                </div>
+                                <div>
+                                  <strong>Not linked to this alert</strong>
+                                  <ul>{details.evidenceScope.missingSignals.map((signal) => <li key={signal}>{MISSING_SIGNAL_LABELS[signal]}</li>)}</ul>
+                                </div>
+                              </div>
+                              <p className="ai-help">This is one alert record. Its fields do not independently confirm a cause.</p>
+                            </section>
+                          ) : <p className="ai-help">Evidence scope is missing or invalid for this saved result.</p>}
                           {details.note && <p className="ai-help">{details.note}</p>}
                           <time dateTime={analysis.createdAt}>{formatUtc(analysis.createdAt)}</time>
                         </div>

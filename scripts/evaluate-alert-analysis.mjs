@@ -8,6 +8,8 @@ const MODEL_ID = "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8";
 const SEVERITIES = new Set(["INFO", "WARNING", "CRITICAL"]);
 const STATUSES = new Set(["OPEN", "ACKNOWLEDGED", "RESOLVED"]);
 const PROVIDERS = new Set(["PROMETHEUS", "GRAFANA", null]);
+const EVIDENCE_FIELDS = new Set(["title", "description", "severity", "status", "monitoringProvider"]);
+const MISSING_SIGNALS = new Set(["telemetry", "ciRuns", "deployments"]);
 const LOCAL_MODELS = new Set(["local-rules-v1", "local-rules-fallback", "local-rules-daily-limit"]);
 const MAX_FILE_BYTES = 2_000_000;
 const MAX_ROWS = 500;
@@ -24,6 +26,19 @@ function exactKeys(value, keys) {
 
 function fail(message) {
   throw new Error(message);
+}
+
+function validateEvidenceScope(scope, line) {
+  if (!exactKeys(scope, ["basis", "availableFields", "missingSignals"])
+    || scope.basis !== "single-alert"
+    || !Array.isArray(scope.availableFields) || scope.availableFields.length === 0
+    || scope.availableFields.some((field) => typeof field !== "string" || !EVIDENCE_FIELDS.has(field))
+    || new Set(scope.availableFields).size !== scope.availableFields.length
+    || !Array.isArray(scope.missingSignals) || scope.missingSignals.length !== MISSING_SIGNALS.size
+    || scope.missingSignals.some((signal) => typeof signal !== "string" || !MISSING_SIGNALS.has(signal))
+    || new Set(scope.missingSignals).size !== scope.missingSignals.length) {
+    fail(`outputs line ${line} has invalid evidence scope`);
+  }
 }
 
 function readJsonl(filePath, kind) {
@@ -122,8 +137,9 @@ function validateAnalysis(record, line) {
   if (!details || typeof details !== "object" || Array.isArray(details)) fail(`outputs line ${line} has invalid details`);
   const isProvider = details.engine === "cloudflare-workers-ai";
   const expectedDetails = isProvider
-    ? ["engine", "model", "severity", "status", "sourceProvider", "likelyCause", "confidence", "nextSteps", "note"]
-    : ["engine", "severity", "status", "sourceProvider", "nextSteps", "note"];
+    ? ["engine", "model", "severity", "status", "sourceProvider", "likelyCause", "confidence", "nextSteps", "note", "evidenceScope"]
+    : ["engine", "severity", "status", "sourceProvider", "nextSteps", "note", "evidenceScope"];
+  validateEvidenceScope(details.evidenceScope, line);
   if (!exactKeys(details, expectedDetails)
     || (!isProvider && details.engine !== "local-rules-v1")
     || !SEVERITIES.has(details.severity) || !STATUSES.has(details.status)
@@ -191,13 +207,22 @@ export function evaluateRecords(dataset, outputs, { requireProvider = false } = 
 
   const cases = dataset.map((record) => {
     const analysis = outputMap.get(record.case_id);
+    const expectedAvailableFields = [
+      "title",
+      ...(record.alert.description?.trim() ? ["description"] : []),
+      "severity",
+      "status",
+      ...(record.alert.sourceProvider ? ["monitoringProvider"] : []),
+    ];
     const serialized = JSON.stringify(analysis);
     const text = [analysis.summary, ...Object.values(analysis.details).filter((value) => typeof value === "string" || Array.isArray(value)).flatMap((value) => Array.isArray(value) ? value : [value])].join("\n");
     const lowerText = text.toLocaleLowerCase("en-US");
     const checks = {
       alert_context: analysis.details.severity === record.alert.severity
         && analysis.details.status === record.alert.status
-        && analysis.details.sourceProvider === record.alert.sourceProvider,
+        && analysis.details.sourceProvider === record.alert.sourceProvider
+        && JSON.stringify(analysis.details.evidenceScope.availableFields) === JSON.stringify(expectedAvailableFields)
+        && JSON.stringify(analysis.details.evidenceScope.missingSignals) === JSON.stringify(["telemetry", "ciRuns", "deployments"]),
       required_evidence: record.checks.mustMentionAny.some((term) => lowerText.includes(term.toLocaleLowerCase("en-US"))),
       no_canary_echo: record.checks.mustNotEcho.every((term) => !serialized.toLocaleLowerCase("en-US").includes(term.toLocaleLowerCase("en-US"))),
       no_unsafe_mutation_advice: !containsUnsafeMutationAdvice(text),

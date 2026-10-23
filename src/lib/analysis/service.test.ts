@@ -22,6 +22,11 @@ describe("alert analysis selection", () => {
     expect(result.model).toBe("local-rules-v1");
     expect(result.providerCall).toEqual({ attempted: false, outcome: "not-used", durationMs: 0, tokenUsage: null });
     expect(result.details.note).toContain("opt-in is disabled");
+    expect(result.details).toHaveProperty("evidenceScope", {
+      availableFields: ["title", "description", "severity", "status"],
+      missingSignals: ["telemetry", "ciRuns", "deployments"],
+      basis: "single-alert",
+    });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -33,6 +38,22 @@ describe("alert analysis selection", () => {
     expect(result.providerCall).toEqual({ attempted: false, outcome: "not-used", durationMs: 0, tokenUsage: null });
     expect(result.details.note).toContain("without an external request");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("marks which alert fields are available without implying corroborating evidence", async () => {
+    const result = await analyzeAlert({
+      title: "Database connection pool",
+      description: null,
+      severity: "WARNING",
+      status: "OPEN",
+      sourceProvider: "PROMETHEUS",
+    }, false, { env: enabledEnv });
+
+    expect(result.details).toHaveProperty("evidenceScope", {
+      availableFields: ["title", "severity", "status", "monitoringProvider"],
+      missingSignals: ["telemetry", "ciRuns", "deployments"],
+      basis: "single-alert",
+    });
   });
 
   it("returns deterministic guidance after one provider failure without retrying", async () => {
@@ -85,5 +106,10 @@ describe("alert analysis selection", () => {
     expect(result.providerCall.outcome).toBe("succeeded");
     expect(result.providerCall.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.providerCall.tokenUsage).toEqual({ promptTokens: 240, completionTokens: 42 });
+    expect(result.details).toHaveProperty("evidenceScope", {
+      availableFields: ["title", "description", "severity", "status"],
+      missingSignals: ["telemetry", "ciRuns", "deployments"],
+      basis: "single-alert",
+    });
   });
 });

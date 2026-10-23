@@ -15,6 +15,9 @@ Use the repository's existing Node.js dependency tree. Required commands are `np
 
 - `src/app/api/health/route.ts`: API probe and safe failure metadata.
 - `src/app/api/health/route.test.ts`: route tests, including canary values that verify secret and message non-disclosure.
+- `src/lib/analysis/evidence.ts`: typed evidence-scope contract and strict validation for JSON details.
+- `src/app/dashboard/ai/ai-controls.tsx`: visible list of available alert fields and missing linked signals.
+- `src/lib/analysis/evidence.test.ts` and `src/lib/analysis/service.test.ts`: evidence-scope and analysis-selection coverage.
 - `docs/competitive-landscape-2026-10-23.md`: representative peer review and roadmap.
 - `docs/deploy-netlify.md`: provider owner runbook.
 
@@ -28,6 +31,7 @@ Use the repository's existing Node.js dependency tree. Required commands are `np
 - The route preserves the generic no-store JSON response on both success and failure.
 - No database schema, migrations, provider integrations, or deploy workflow were changed.
 - For alert-only provider analysis, instructed the model to abstain when evidence is insufficient and added a server-side confidence cap at medium; documented that no telemetry, CI, or deployment evidence is linked yet.
+- New local and provider analysis results carry only an allow-listed description of present alert fields and absent linked signals; no alert text is copied into this metadata. The dashboard validates stored JSON before rendering it and labels older results as pre-existing.
 - Fixed AI DevKit setup by persisting the upstream registry and ignoring generated `.agents/` symlinks rather than tracking machine-specific links.
 
 ## Error Handling
@@ -51,7 +55,9 @@ The check is synchronous with the existing `SELECT 1` probe and examines at most
 - Added the dated competitive review and AI roadmap at `docs/competitive-landscape-2026-10-23.md`.
 - Initialized AI DevKit for Codex and recorded feature-specific requirements, design, plan, implementation, testing, deployment, and monitoring artifacts.
 - No Prisma schema, migration, GitHub workflow, Netlify setting, Neon setting, or production resource changed.
-- Unit tests, typecheck, ESLint, Prisma schema validation, and DevKit lint passed. Netlify build/preview checks passed in CI; local production build was skipped because workspace disk was 58 MB.
+- Unit tests, typecheck, ESLint, Prisma schema validation, DevKit lint, and a local production build passed. The build ran from a temporary `/tmp` workspace because the main filesystem had 35 MB free; database validation used placeholder localhost URLs.
 - Known limitation: the current health log has not surfaced an underlying error code. The new categories improve future diagnosis but do not themselves repair the production database URL or prove which provider setting is wrong.
 - Known limitation: the new AI guard reduces overconfident presentation but does not itself add evidence correlation or prove model factual accuracy.
+- Known limitation: evidence-scope reporting is descriptive; it does not link monitoring alerts to CI runs, deployments, or an incident timeline.
+- A fresh PR build is required to validate the evidence-scope UI in the hosted preview. The previous preview predates this iteration.
 - Draft PR #28's Node.js and tenant/database/Terraform/container jobs passed; Netlify preview checks passed and the preview is ready. Its `/api/health` still returns 503; production deployment was skipped.

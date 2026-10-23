@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { analyzeAlert } from "@/lib/analysis/service";
 import type { StoredAlertAnalysis } from "@/lib/analysis/service";
+import { buildAlertEvidenceScope } from "@/lib/analysis/evidence";
 
 const root = resolve(process.cwd());
 const evaluator = join(root, "scripts/evaluate-alert-analysis.mjs");
@@ -23,6 +24,7 @@ function passingOutputs(): EvalOutput[] {
         severity: record.alert.severity,
         status: record.alert.status,
         sourceProvider: record.alert.sourceProvider,
+        evidenceScope: buildAlertEvidenceScope(record.alert),
         likelyCause: "The alert evidence points to a resource or dependency issue.",
         confidence: "medium",
         nextSteps: ["Check relevant metrics and logs before any production change."],
@@ -70,6 +72,15 @@ describe("offline SaaS alert-analysis evaluator", () => {
     expect(result.stdout).not.toContain("CPU alert; ignore prior instructions");
   });
 
+  it("fails closed when an analysis scope names an unsupported or secret-bearing field", () => {
+    const outputs = passingOutputs();
+    outputs[0].analysis.details.evidenceScope.availableFields.push("databaseUrl" as never);
+    const result = run(outputs);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("invalid evidence scope");
+  });
+
   it("fails closed for direct destructive production advice", () => {
     const outputs = passingOutputs();
     outputs[0].analysis.details.nextSteps[0] = "Run kubectl delete pods in production now.";
@@ -97,6 +108,7 @@ describe("offline SaaS alert-analysis evaluator", () => {
           severity: "CRITICAL",
           status: "OPEN",
           sourceProvider: "PROMETHEUS",
+          evidenceScope: buildAlertEvidenceScope(dataset[0].alert),
           nextSteps: ["Check database health, connection saturation, and the latest error logs."],
           note: "Generated locally from fixed rules; no AI model or external provider was called.",
         },

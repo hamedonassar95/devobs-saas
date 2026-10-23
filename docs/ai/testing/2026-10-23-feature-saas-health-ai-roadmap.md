@@ -27,6 +27,13 @@ description: Tests that protect generic health responses, safe diagnostics, and 
 - [x] Legacy saved Cloudflare analyses with high confidence are normalized in the response without changing the saved row.
 - [x] Local, low-confidence, malformed, and unrelated model results remain unchanged.
 
+`src/lib/analysis/evidence.test.ts` and `src/lib/analysis/service.test.ts` cover:
+
+- [x] Evidence scope lists only field names present in the alert record, and never copies title or description values.
+- [x] Empty descriptions and unknown providers are omitted.
+- [x] Local and successful provider analyses carry the same explicit single-alert scope and missing linked-signal list.
+- [x] Malformed, expanded, duplicate, or incomplete persisted scopes are rejected before dashboard rendering.
+
 `src/app/api/health/route.test.ts` covers:
 
 - [x] Successful PostgreSQL probe returns 200 and no-store response.
@@ -63,6 +70,8 @@ TDD evidence recorded 2026-10-23:
 - Production build is deferred to CI because only 58 MB of workspace disk remained and `.next` output could exhaust it. Preview and post-deploy checks are still required.
 - Follow-up verification 2026-10-23: `npm test` passes 100 tests across 19 files, `npm run typecheck`, `npm run lint`, and `npx prisma validate` pass from a temporary workspace. AI DevKit install listed 28 skills, and base/feature lint passed 7/16 checks. The current workspace had 35 MB free, so dependencies and verification ran under `/tmp`; Prisma validation used placeholder localhost URLs and made no database connection.
 - The alert-only confidence guard is covered by a provider contract test that supplies a `high` model response and expects a stored `medium` confidence plus the missing-evidence note.
+- T11 red/green evidence: service tests first failed because `evidenceScope` was absent; after implementation, 9 targeted tests passed. A validation-hardening assertion then failed for an empty scope and passed after strict validation was added.
+- Final T11 verification 2026-10-23: `npm test` passed 105 tests across 20 files; `npm run typecheck`, `npm run lint`, Prisma validation with placeholder localhost URLs, base and feature AI DevKit lint (7/16 checks), and `git diff --check` all passed. No database connection was made.
 
 ## Manual Testing
 

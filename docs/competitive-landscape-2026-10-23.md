@@ -11,7 +11,7 @@ The practical opportunity is a small-team control room that joins existing monit
 
 ### Current-docs verification and implementation decision
 
-On the research date, the official Datadog Bits Investigation guide says investigations may be marked inconclusive when available data cannot support a defensible conclusion. Dynatrace's current event-correlation guide describes normalization, topology, aggregation, and deduplication before problem analysis. PagerDuty's documentation ties content-based grouping to explicit event fields/metadata. GitLab documents root-cause assistance for failed CI/CD jobs. These patterns support a conservative product rule: Devobs must not infer a root cause or high confidence from a single alert alone. Until independently linked telemetry, CI, or deployment evidence exists, alert analysis is a hypothesis and confidence is capped at medium.
+On the research date, the official Datadog Bits Investigation guide says investigations may be marked inconclusive when available data cannot support a defensible conclusion. Dynatrace's current event-correlation guide describes normalization, topology, aggregation, and deduplication before problem analysis. PagerDuty's documentation ties content-based grouping to explicit event fields/metadata. GitLab documents root-cause assistance for failed CI/CD jobs. Elastic announced nightshift AI SRE in private preview on October 8, 2026, describing full-stack context, parallel hypothesis testing, and surfaced unknowns. These patterns support a conservative product rule: Devobs must not infer a root cause or high confidence from a single alert alone. Until independently linked telemetry, CI, or deployment evidence exists, alert analysis is a hypothesis and confidence is capped at medium. The current iteration makes the available alert fields and missing linked signals visible; cross-source analysis remains deferred until explicit links exist.
 
 ## Representative systems
 
@@ -29,6 +29,7 @@ On the research date, the official Datadog Bits Investigation guide says investi
 | Amazon CloudWatch Investigations | Lets operators review AI suggestions, accept or reject findings, and invoke runbook remediation. | Require an explicit review action before running a remediation. | Preserve auditability and human approval around changes. |
 | Gemini Cloud Assist | Produces observations and hypotheses from cloud logs, configuration, and metrics. Google documents access restrictions for creating/running investigations as of April 10, 2026. | Return observations, hypotheses, sources, and next steps as separate fields. | Verify feature availability and access conditions before adopting a cloud-specific dependency. |
 | OpenTelemetry | Defines vendor-neutral conventions for telemetry signals and resource attributes. | Use standard signal names and resource identity across integrations. | Prefer an OTel-compatible event contract over a provider-specific schema. |
+| Elastic nightshift AI SRE | Announced in private preview; Elastic describes testing multiple hypotheses against full-stack context and surfacing unknowns. | Show investigation evidence and uncertainty, not only a generated answer. | Devobs makes the scope of its current alert-only analysis visible; multi-signal investigation remains a later milestone. |
 
 ## What Devobs has today
 
@@ -38,6 +39,7 @@ On the research date, the official Datadog Bits Investigation guide says investi
 - **AI analysis:** deterministic local rules run without sending alert data to an external provider. Cloudflare Workers AI is optional, requires organization opt-in and application configuration, and uses redaction, usage budgets, and a deterministic fallback.
 - **Repository assistance:** the GitHub App audits selected repositories and can propose a limited draft PR. It does not merge or publish a repair.
 - **Current gap:** analysis is attached to an alert. There is no shared incident record that groups related alerts, deployments, run history, evidence links, and follow-up actions.
+- **Evidence-scope increment:** new analysis results name the alert fields available and explicitly list unlinked telemetry, CI, and deployment signals. This is transparency about scope, not evidence correlation.
 - **Operational blocker:** production and Deploy Previews #27 and #28 returned HTTP 503 on 2026-10-23. A successful `SELECT 1` in a Neon editor only proves that query worked for the selected Neon project/branch; it does not prove Netlify's production or preview `DATABASE_URL` points to that same database and context.
 
 ## Recommended roadmap
@@ -93,5 +95,8 @@ All links below are official product or standards documentation. Capabilities an
 - [Amazon CloudWatch investigations](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Investigations-Investigate.html)
 - [Gemini Cloud Assist investigation deprecations and access conditions](https://docs.cloud.google.com/cloud-assist/deprecations/features)
 - [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/)
+- [Elastic: Introducing nightshift AI SRE](https://www.elastic.co/blog/introducing-elastic-nightshift-ai-sre-interactive-post)
+- [Elastic: nightshift AI SRE investigations](https://www.elastic.co/observability-labs/blog/ai-sre-elastic-nightshift)
+- [Elastic Investor Relations: October 8, 2026 private-preview announcement](https://ir.elastic.co/News--Events/news/news-details/2026/Elastic-Introduces-Elastic-nightshift-AI-SRE-to-Investigate-with-the-Full-Context-Others-Cant-Afford-to-Keep/default.aspx)
 - [Prisma ORM error reference](https://www.prisma.io/docs/orm/reference/error-reference)
 - [Neon connection pooling](https://neon.com/docs/connect/connection-pooling)

@@ -15,6 +15,7 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 - [x] M4: Run local unit/type/lint/schema/DevKit gates and prepare a reviewable change; CI handles the build because local disk is nearly full.
 - [ ] M5: Owner confirms Netlify/Neon contexts; fresh deployed health checks return HTTP 200.
 - [x] M6: Harden alert-only AI confidence, refresh the evidence-based research, and make AI DevKit setup reproducible.
+- [x] M7: Show the exact scope of available alert fields and unlinked corroborating signals with each new analysis.
 
 ## Task Breakdown
 
@@ -30,6 +31,7 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 | T8 | done | Treat single-alert AI causes as hypotheses and cap provider confidence at medium until independently linked evidence is supplied. | T1–T4 | Prompt contract and server-side cap; tests cover new model output and legacy saved results. |
 | T9 | done | Refresh peer research from current official docs and record the AI DevKit registry with generated skills excluded from source control. | T8 | Report cites current Datadog, Dynatrace, PagerDuty, and GitLab docs; `.agents/` is ignored while the registry remains in `.ai-devkit.json`. |
 | T10 | done | Verify the scoped implementation and update phase evidence. | T8–T9 | 100 unit tests, TypeScript, ESLint, Prisma schema, and AI DevKit base/feature lint pass from a temporary workspace because the main filesystem is nearly full. |
+| T11 | done | Persist and display an allow-listed evidence-scope summary for new local and provider analysis results. | T8 | 105 tests and a temporary-workspace production build pass; typecheck, ESLint, Prisma validation, DevKit lint, and `git diff --check` pass. |
 
 ### Sequencing notes
 
@@ -37,6 +39,7 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 - T5 must pass before PR creation; if the low-disk environment blocks a gate, record the exact command and limitation rather than skipping silently.
 - T6 is complete as a review checkpoint. Do not merge or publish automatically.
 - T7 cannot be completed from the repository because provider settings and secrets are owner-controlled.
+- Task tracing was probed with `npx ai-devkit@latest task list --name saas-health-ai-roadmap --json`; this CLI version returned `unknown command 'task'`. Continue without task events and record the limitation.
 
 ## Dependencies
 
@@ -63,3 +66,5 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 Health diagnostics, test-first evidence, provider research, operator documentation, and the draft PR are complete. Local gates and required CI checks passed; the new preview is ready. Production and preview health still return 503, so owner-controlled provider-context confirmation is the blocker. Incident grouping, OpenTelemetry ingestion, and evidence-backed multi-signal analysis remain separately planned future work and were not silently added to this patch.
 
 The alert-only AI confidence guard and research/DevKit updates are also implemented and verified locally. T7 remains blocked by the owner-controlled Netlify/Neon runtime context; multi-signal incident correlation remains a separate schema/design milestone.
+
+T11 implementation and local verification are complete. Evidence-scope metadata is included with new alert analyses and displayed separately from likely cause and confidence. The change still needs an updated PR/CI run.
