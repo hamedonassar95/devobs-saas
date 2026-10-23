@@ -107,6 +107,7 @@ describe("PostgreSQL tenant isolation policies", () => {
         await tx.alert.deleteMany({ where: { organizationId: tenant.organizationId } });
         await tx.monitoringSource.deleteMany({ where: { organizationId: tenant.organizationId } });
         await tx.ciCdIntegration.deleteMany({ where: { organizationId: tenant.organizationId } });
+        await tx.gitHubAppInstallation.deleteMany({ where: { organizationId: tenant.organizationId } });
         await tx.subscription.deleteMany({ where: { organizationId: tenant.organizationId } });
       });
     }
@@ -144,6 +145,35 @@ describe("PostgreSQL tenant isolation policies", () => {
     expect(crossTenantCredential).toBeNull();
     expect(await withTenantTransaction(tenantB, (tx) => tx.monitoringWebhookCredential.findMany({ select: { tokenHash: true } })))
       .toMatchObject([{ tokenHash: monitoringWebhookCredentialBHash }]);
+  });
+
+  it("isolates GitHub App installation records by organization", async () => {
+    const installationId = suffix.replaceAll("-", "").slice(0, 20);
+    await withTenantTransaction(tenantA, (tx) => tx.gitHubAppInstallation.create({
+      data: {
+        organizationId: organizationAId,
+        installationId,
+        accountLogin: "tenant-a",
+        connectedByUserId: userAId,
+        workflowsWriteEnabled: true,
+      },
+    }));
+
+    const ownInstallation = await withTenantTransaction(tenantA, (tx) => tx.gitHubAppInstallation.findUnique({ where: { organizationId: organizationAId } }));
+    const crossTenantInstallation = await withTenantTransaction(tenantB, (tx) => tx.gitHubAppInstallation.findUnique({ where: { organizationId: organizationAId } }));
+    const missingContextInstallations = await prisma.gitHubAppInstallation.findMany({ where: { organizationId: organizationAId } });
+
+    expect(ownInstallation).toMatchObject({ organizationId: organizationAId, installationId, accountLogin: "tenant-a" });
+    expect(crossTenantInstallation).toBeNull();
+    expect(missingContextInstallations).toEqual([]);
+    await expect(withTenantTransaction(tenantA, (tx) => tx.gitHubAppInstallation.create({
+      data: {
+        organizationId: organizationBId,
+        installationId: `${installationId}1`,
+        accountLogin: "tenant-b",
+        connectedByUserId: userAId,
+      },
+    }))).rejects.toThrow();
   });
 
   it("authenticates monitoring webhooks, upserts provider events, and blocks cross-tenant delivery", async () => {

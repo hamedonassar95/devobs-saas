@@ -72,35 +72,37 @@ enum SubscriptionStatus {
 }
 
 model Organization {
-  id                   String                 @id @default(cuid())
-  name                 String
-  slug                 String                 @unique
-  aiAnalysisEnabled    Boolean                @default(false)
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  memberships          Membership[]
-  ciCdIntegrations     CiCdIntegration[]
-  monitoringSources    MonitoringSource[]
-  alerts               Alert[]
-  analysisResults      AnalysisResult[]
-  aiAnalysisUsageDaily AiAnalysisUsageDaily[]
-  stripeCustomerId     String?                @unique
-  subscriptions        Subscription[]
+  id                    String                 @id @default(cuid())
+  name                  String
+  slug                  String                 @unique
+  aiAnalysisEnabled     Boolean                @default(false)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  memberships           Membership[]
+  ciCdIntegrations      CiCdIntegration[]
+  monitoringSources     MonitoringSource[]
+  alerts                Alert[]
+  analysisResults       AnalysisResult[]
+  aiAnalysisUsageDaily  AiAnalysisUsageDaily[]
+  githubAppInstallation GitHubAppInstallation?
+  stripeCustomerId      String?                @unique
+  subscriptions         Subscription[]
 
   @@unique([id, slug])
   @@map("organizations")
 }
 
 model User {
-  id              String       @id @default(cuid())
-  email           String       @unique
-  name            String?
-  passwordHash    String?
-  emailVerifiedAt DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  memberships     Membership[]
-  sessions        Session[]
+  id                     String                  @id @default(cuid())
+  email                  String                  @unique
+  name                   String?
+  passwordHash           String?
+  emailVerifiedAt        DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  memberships            Membership[]
+  sessions               Session[]
+  githubAppInstallations GitHubAppInstallation[]
 
   @@map("users")
 }
@@ -159,6 +161,21 @@ model CiCdIntegration {
   @@unique([organizationId, provider, repositoryUrl])
   @@index([organizationId, status])
   @@map("cicd_integrations")
+}
+
+model GitHubAppInstallation {
+  id                    String       @id @default(cuid())
+  organizationId        String       @unique
+  installationId        String       @unique
+  accountLogin          String
+  workflowsWriteEnabled Boolean      @default(false)
+  connectedByUserId     String
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedBy           User         @relation(fields: [connectedByUserId], references: [id], onDelete: Restrict)
+
+  @@map("github_app_installations")
 }
 
 model MonitoringSource {
