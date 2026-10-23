@@ -70,11 +70,11 @@ export async function GET(_request: Request, context: RouteContext) {
       accountLogin: resources.installation.accountLogin,
       workflowsWriteEnabled: resources.installation.workflowsWriteEnabled,
       repositories,
-    }, { headers: { "Cache-Control": "no-store" } });
+    }, { headers: { "Cache-Control": "no-store", "Vary": "Cookie" } });
   } catch (error) {
-    if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404 });
-    if (error instanceof PlanAccessError) return NextResponse.json({ error: error.message, code: "SUBSCRIPTION_REQUIRED" }, { status: 402 });
-    if (error instanceof GitHubAppError) return NextResponse.json({ error: error.message }, { status: error.status });
-    return NextResponse.json({ error: "Devobs repository audit is temporarily unavailable." }, { status: 503 });
+    if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404, headers: { "Cache-Control": "no-store" } });
+    if (error instanceof PlanAccessError) return NextResponse.json({ error: error.message, code: "SUBSCRIPTION_REQUIRED" }, { status: 402, headers: { "Cache-Control": "no-store" } });
+    if (error instanceof GitHubAppError) return NextResponse.json({ error: error.message }, { status: error.status, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ error: "Devobs repository audit is temporarily unavailable." }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }
