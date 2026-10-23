@@ -1,0 +1,61 @@
+name: Recover failed preflight migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_preflight_recovery:
+        description: "Confirm that only the isolated Neon preflight database will be repaired"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preflight-migration-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover-preflight:
+    name: Mark the failed preflight migration as rolled back
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirm_preflight_recovery }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: ${{ secrets.NEON_PREVIEW_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.NEON_PREVIEW_DIRECT_URL }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify both URLs target the isolated preflight database
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const expected = /^(?:ep-weathered-pond-b922kamh|ep-weathered-pond-b922kamh-pooler)\.c-7\.eu-central-1\.aws\.neon\.tech$/;
+          for (const key of ["DATABASE_URL", "DIRECT_URL"]) {
+            const value = process.env[key];
+            if (!value) throw new Error(`${key} is not configured`);
+            const url = new URL(value);
+            if (url.protocol !== "postgresql:" || url.pathname !== "/devobs-saas-preflight" || !expected.test(url.hostname)) {
+              throw new Error(`${key} must point to the approved Neon preflight database`);
+            }
+          }
+          console.log("Both URLs target the approved preflight database.");
+          NODE
+
+      - name: Resolve the failed initial migration for retry
+        run: npx prisma migrate resolve --rolled-back 20261020000000_init
