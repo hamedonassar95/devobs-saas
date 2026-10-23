@@ -83,4 +83,35 @@ describe("GET /api/health", () => {
     expect(serializedLogs).not.toContain(messageCanary);
     expect(serializedLogs).not.toContain("unrecognized-code-canary");
   });
+
+  it("extracts only a Prisma code from a nested message and never logs connection details", async () => {
+    const messageCanary =
+      "Prisma error code P1000: failed for postgresql://private-user:private-password@db.example";
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("DATABASE_URL", "configured-but-private");
+    queryRaw.mockRejectedValue(
+      Object.assign(new Error("Database initialization failed"), {
+        cause: new Error(messageCanary),
+      }),
+    );
+
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: "unavailable" });
+    expect(errorLog).toHaveBeenCalledWith(
+      "[health] Database connectivity check failed; returning HTTP 503.",
+      JSON.stringify({
+        event: "health_check.database_probe_failed",
+        databaseUrlConfigured: true,
+        errorName: "Error",
+        errorCode: "P1000",
+      }),
+    );
+    const serializedLogs = JSON.stringify(errorLog.mock.calls);
+    expect(serializedLogs).not.toContain(messageCanary);
+    expect(serializedLogs).not.toContain("private-user");
+    expect(serializedLogs).not.toContain("private-password");
+    expect(serializedLogs).not.toContain("db.example");
+  });
 });

@@ -29,12 +29,19 @@ function safeDatabaseErrorDetails(error: unknown) {
     if (typeof current !== "object" || current === null) break;
 
     const record = current as Record<string, unknown>;
-    const candidateCode =
+    const explicitCode =
       typeof record.errorCode === "string"
         ? record.errorCode
         : typeof record.code === "string"
           ? record.code
           : undefined;
+    const message = typeof record.message === "string" ? record.message.slice(0, 2048) : "";
+    // Some Prisma initialization errors include a safe P-code only in their
+    // message. Extract the code token, never the message or its connection data.
+    const messageCode =
+      message.match(/(?:^|\bcode\s*[:=]?\s*)(P\d{4})\b/i)?.[1] ??
+      message.match(/^\s*(P\d{4})\b/)?.[1];
+    const candidateCode = explicitCode ?? messageCode;
 
     if (candidateCode && safeCodePattern.test(candidateCode)) {
       errorCode = candidateCode;
