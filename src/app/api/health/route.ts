@@ -5,24 +5,44 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 function safeDatabaseErrorDetails(error: unknown) {
+  const safeErrorNames = new Set([
+    "Error",
+    "TypeError",
+    "PrismaClientInitializationError",
+    "PrismaClientKnownRequestError",
+    "PrismaClientUnknownRequestError",
+    "PrismaClientRustPanicError",
+    "PrismaClientValidationError",
+  ]);
   const errorName =
-    error instanceof Error && /^[A-Za-z][A-Za-z0-9]*$/.test(error.name)
+    error instanceof Error && safeErrorNames.has(error.name)
       ? error.name
       : "UnknownError";
-  const record = typeof error === "object" && error !== null ? error : undefined;
-  const candidateCode =
-    record && "errorCode" in record && typeof record.errorCode === "string"
-      ? record.errorCode
-      : record && "code" in record && typeof record.code === "string"
-        ? record.code
-        : undefined;
-  const errorCode =
-    candidateCode &&
-    /^(?:P\d{4}|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|EAI_AGAIN|ENOTFOUND)$/.test(
-      candidateCode,
-    )
-      ? candidateCode
-      : undefined;
+  const safeCodePattern =
+    /^(?:P\d{4}|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|EAI_AGAIN|ENOTFOUND)$/;
+
+  // Prisma may wrap the underlying connection error, so inspect only a few
+  // `cause` levels and only return allow-listed error codes.
+  let current: unknown = error;
+  let errorCode: string | undefined;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (typeof current !== "object" || current === null) break;
+
+    const record = current as Record<string, unknown>;
+    const candidateCode =
+      typeof record.errorCode === "string"
+        ? record.errorCode
+        : typeof record.code === "string"
+          ? record.code
+          : undefined;
+
+    if (candidateCode && safeCodePattern.test(candidateCode)) {
+      errorCode = candidateCode;
+      break;
+    }
+
+    current = record.cause;
+  }
 
   return errorCode ? { errorName, errorCode } : { errorName };
 }
@@ -35,8 +55,15 @@ export async function GET() {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    // Keep connection strings and raw database error messages out of logs and responses.
-    console.error("Health check database probe failed", safeDatabaseErrorDetails(error));
+    // Log only safe metadata. Never log DATABASE_URL or the raw Prisma error.
+    console.error(
+      "[health] Database connectivity check failed; returning HTTP 503.",
+      JSON.stringify({
+        event: "health_check.database_probe_failed",
+        databaseUrlConfigured: Boolean(process.env.DATABASE_URL?.trim()),
+        ...safeDatabaseErrorDetails(error),
+      }),
+    );
     return NextResponse.json(
       { status: "unavailable" },
       {

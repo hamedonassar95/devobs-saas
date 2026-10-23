@@ -145,6 +145,7 @@ jobs:
         id: candidate
         shell: bash
         env:
+          # Prisma reads DATABASE_URL; map the isolated preflight secret here for this deploy.
           DATABASE_URL: ${{ secrets.NEON_PREVIEW_DATABASE_URL }}
         run: |
           set -euo pipefail
