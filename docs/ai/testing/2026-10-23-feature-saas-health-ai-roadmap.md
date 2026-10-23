@@ -46,12 +46,14 @@ TDD evidence recorded 2026-10-23:
 - `npm run typecheck` passed after regenerating the ignored local Prisma Client from the checked-in schema.
 - `npm run lint` passed; `npx prisma validate` passed with temporary localhost placeholders for the required URL variables.
 - `npx ai-devkit@latest lint` and `npx ai-devkit@latest lint --feature saas-health-ai-roadmap` passed with 7 and 16 checks respectively.
+- Draft PR #28 CI passed Node.js checks and tenant database/Terraform/container checks; Netlify header/redirect checks passed and Deploy Preview became ready. The production deploy job was skipped as expected for a PR.
+- The PR #28 preview `/api/health` request returned HTTP 503, confirming the database runtime issue remains. Its Function log must be inspected for the new safe fields; CI success alone does not validate the database connection.
 - The Vitest coverage provider package is not installed, so no coverage percentage is reported.
 - Production build is deferred to CI because only 58 MB of workspace disk remained and `.next` output could exhaust it. Preview and post-deploy checks are still required.
 
 ## Manual Testing
 
-After a reviewed preview deploy, request `/api/health`, then inspect only the fixed event fields in Netlify Function logs. Confirm no URL, hostname, credential, query, or raw message appears. Keep Production and Deploy Preview checks separate.
+On Deploy Preview #28, request `/api/health`, then inspect only the fixed event fields in Netlify Function logs. Confirm no URL, hostname, credential, query, or raw message appears. Keep Production and Deploy Preview checks separate.
 
 ## Performance Testing
 

@@ -47,5 +47,6 @@ The check is synchronous with the existing `SELECT 1` probe and examines at most
 - Added the dated competitive review and AI roadmap at `docs/competitive-landscape-2026-10-23.md`.
 - Initialized AI DevKit for Codex and recorded feature-specific requirements, design, plan, implementation, testing, deployment, and monitoring artifacts.
 - No Prisma schema, migration, GitHub workflow, Netlify setting, Neon setting, or production resource changed.
-- Unit tests, typecheck, ESLint, Prisma schema validation, and DevKit lint passed. The production build and post-deploy preview checks remain CI/owner checkpoints; workspace disk was 58 MB at the last check.
+- Unit tests, typecheck, ESLint, Prisma schema validation, and DevKit lint passed. Netlify build/preview checks passed in CI; local production build was skipped because workspace disk was 58 MB.
 - Known limitation: the current health log has not surfaced an underlying error code. The new categories improve future diagnosis but do not themselves repair the production database URL or prove which provider setting is wrong.
+- Draft PR #28's Node.js and tenant/database/Terraform/container jobs passed; Netlify preview checks passed and the preview is ready. Its `/api/health` still returns 503; production deployment was skipped.

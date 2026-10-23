@@ -13,7 +13,7 @@ description: Health, privacy, and AI quality signals for this product phase
 
 - Track `/api/health` HTTP 200 and 503 rates separately for Production and Deploy Preview.
 - Compare function duration and database-probe failure rate over time; do not infer success from duration-only log lines.
-- Current observed status on 2026-10-23: Production and PR #27 Deploy Preview both returned 503.
+- Current observed status on 2026-10-23: Production and PR #27/#28 Deploy Previews all returned 503. PR #28's health diagnostics are deployed in that preview, not in Production.
 
 ### AI Quality
 

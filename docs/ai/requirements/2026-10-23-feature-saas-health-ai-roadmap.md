@@ -35,7 +35,7 @@ Non-goals for this change: repair Netlify/Neon account settings; modify or print
 - `/api/health` returns the same generic `{"status":"unavailable"}` with HTTP 503 on database failure and no-store caching.
 - Logs contain only fixed categories, explicitly allow-listed codes, and booleans about the configured URL; tests prove URLs, hosts, usernames, passwords, and raw exception messages are absent.
 - Tests cover recognized Prisma/network codes, nested causes, code normalization, URL shape, pooled-host detection, and message-only classification.
-- Production and Deploy Preview are independently documented and both are currently identified as returning 503 until provider configuration is confirmed.
+- Production and Deploy Previews #27 and #28 are independently identified as returning 503 until provider configuration is confirmed.
 - A dated competitive report links official sources, labels the market sample representative rather than exhaustive, and separates current code from proposed work.
 
 ## Constraints & Assumptions

@@ -24,14 +24,14 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 | T3 | done | Add URL-shape booleans, pooled-host hint, allow-listed error codes, and fixed categories. | T2 | 13 targeted health-route tests pass; canaries assert URL and raw error text are absent. |
 | T4 | done | Write Netlify/Neon runbook and complete the seven AI DevKit phase artifacts. | T1–T3 | `npx ai-devkit@latest lint` passes; troubleshooting keeps production and preview separate. |
 | T5 | done | Run local quality gates and review the diff for regressions/secrets. | T3–T4 | 97 tests pass; typecheck, ESLint, Prisma validation, base/feature lint, and `git diff --check` pass. Production build is reserved for CI due to low disk. |
-| T6 | todo | Open a review-only PR to `main` and inspect CI/preview. | T5; GitHub write access | CI and preview smoke checks; no merge or production deploy from this task. |
+| T6 | done | Open a draft PR to `main` and inspect CI/preview. | T5; GitHub write access | Draft PR #28 is open; Node, tenant/database, Terraform/container, header, redirect, and Netlify preview checks passed. The preview is ready but `/api/health` remains 503. Production deploy was skipped. |
 | T7 | blocked | Confirm owner-controlled Netlify variables and resolve live 503 in each context. | T6; Netlify/Neon owner access | Fresh Production and Preview checks must each return HTTP 200; no secret values shared. |
 
 ### Sequencing notes
 
 - T1–T4 are implementation/documentation work completed in this branch.
 - T5 must pass before PR creation; if the low-disk environment blocks a gate, record the exact command and limitation rather than skipping silently.
-- T6 is a review checkpoint. Do not merge or publish automatically.
+- T6 is complete as a review checkpoint. Do not merge or publish automatically.
 - T7 cannot be completed from the repository because provider settings and secrets are owner-controlled.
 
 ## Dependencies
@@ -56,4 +56,4 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 
 ## Progress summary
 
-Health diagnostics, test-first evidence, provider research, and operator documentation are complete. Full repository verification and PR access remain the immediate focus. Production and preview still return 503; provider-context confirmation is an external blocker. The planned incident-grouping, OpenTelemetry ingestion, and evidence-backed multi-signal analysis remain separate future work and were not silently added to this patch.
+Health diagnostics, test-first evidence, provider research, operator documentation, and the draft PR are complete. Local gates and required CI checks passed; the new preview is ready. Production and preview health still return 503, so owner-controlled provider-context confirmation is the blocker. Incident grouping, OpenTelemetry ingestion, and evidence-backed multi-signal analysis remain separately planned future work and were not silently added to this patch.

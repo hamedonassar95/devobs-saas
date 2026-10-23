@@ -34,7 +34,7 @@ The practical opportunity is a small-team control room that joins existing monit
 - **AI analysis:** deterministic local rules run without sending alert data to an external provider. Cloudflare Workers AI is optional, requires organization opt-in and application configuration, and uses redaction, usage budgets, and a deterministic fallback.
 - **Repository assistance:** the GitHub App audits selected repositories and can propose a limited draft PR. It does not merge or publish a repair.
 - **Current gap:** analysis is attached to an alert. There is no shared incident record that groups related alerts, deployments, run history, evidence links, and follow-up actions.
-- **Operational blocker:** the production and PR #27 preview health endpoints both returned HTTP 503 on 2026-10-23. A successful `SELECT 1` in a Neon editor only proves that query worked for the selected Neon project/branch; it does not prove Netlify's production or preview `DATABASE_URL` points to that same database and context.
+- **Operational blocker:** production and Deploy Previews #27 and #28 returned HTTP 503 on 2026-10-23. A successful `SELECT 1` in a Neon editor only proves that query worked for the selected Neon project/branch; it does not prove Netlify's production or preview `DATABASE_URL` points to that same database and context.
 
 ## Recommended roadmap
 
