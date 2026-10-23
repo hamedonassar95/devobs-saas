@@ -32,6 +32,7 @@ export default async function AiDashboardPage() {
           <span>devobs<span className="brand-period">.</span></span>
         </Link>
         <nav aria-label="Workspace navigation">
+          <Link href="/dashboard/devobs">Automation hub</Link>
           <Link href="/billing">Billing</Link>
           <Link href="/">Marketing site</Link>
         </nav>

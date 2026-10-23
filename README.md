@@ -3,6 +3,8 @@
 
 Multi-tenant DevOps SaaS foundation built with Next.js, TypeScript, Prisma, and PostgreSQL.
 
+See [the GitHub App setup guide](docs/devobs-control-room-github-app.md) for the tenant-scoped Devobs Control Room integration and its permission boundaries.
+
 ## Local setup
 
 1. Install Node.js 22 or newer and PostgreSQL.

@@ -57,6 +57,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
       <h1>Billing</h1>
       <p>Monthly subscriptions for each organization.</p>
       <p><Link href="/dashboard/ai">Open AI incident analysis workspace</Link></p>
+      <p><Link href="/dashboard/devobs">Open Devobs automation hub</Link></p>
       {message && <p role="status">{message}</p>}
       <ul>
         {Object.entries(PLAN_CATALOG).map(([key, plan]) => <li key={key}><strong>{plan.name}</strong>: {plan.description}</li>)}

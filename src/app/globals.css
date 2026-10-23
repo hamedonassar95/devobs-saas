@@ -2071,6 +2071,190 @@ textarea {
 .ai-analysis-result .ai-help {
   color: var(--muted);
 }
+.devobs-control-room .ai-console-intro {
+  max-width: 900px;
+}
+.devobs-audit-workspace {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.devobs-repository-list,
+.devobs-repository-form {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), var(--surface);
+}
+.devobs-repository-list > header,
+.devobs-repository-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.devobs-repository-list > header h2,
+.devobs-repository-form h2 {
+  margin: 5px 0 0;
+  font-size: 19px;
+}
+.devobs-repository-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
+}
+.devobs-repository-heading h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.devobs-repository-heading a {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.devobs-repository-card > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.devobs-repository-form label {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.devobs-repository-form input {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(190, 221, 206, 0.24);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+.devobs-repository-form .button,
+.devobs-repository-card .button {
+  justify-self: start;
+  cursor: pointer;
+}
+.devobs-repository-form > div > p {
+  margin-block: 8px 0;
+}
+.devobs-source-panel,
+.devobs-organization-note,
+.devobs-repair-note,
+.devobs-catalog-card {
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), var(--surface);
+}
+.devobs-source-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 26px;
+  margin-bottom: 18px;
+}
+.devobs-source-panel h2,
+.devobs-repair-note h2 {
+  margin: 5px 0 8px;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+.devobs-source-panel p:not(.ai-kicker),
+.devobs-repair-note > p:not(.ai-kicker) {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.devobs-source-panel a,
+.devobs-card-footer a,
+.devobs-repair-note a {
+  color: var(--mint);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.devobs-organization-note {
+  display: grid;
+  gap: 5px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.devobs-organization-note strong {
+  color: var(--ink);
+}
+.devobs-catalog {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.devobs-catalog-card {
+  min-width: 0;
+  padding: 22px;
+}
+.devobs-card-heading,
+.devobs-card-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.devobs-card-heading h2 {
+  margin: 5px 0 0;
+  font-size: 19px;
+  letter-spacing: -0.03em;
+}
+.devobs-card-heading .ai-kicker {
+  margin: 0;
+}
+.devobs-card-summary {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.devobs-catalog-card ul {
+  display: grid;
+  gap: 8px;
+  padding-inline-start: 20px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.devobs-catalog-card li::marker {
+  color: var(--mint);
+}
+.devobs-card-footer {
+  align-items: center;
+  padding-top: 15px;
+  margin-top: 17px;
+  border-top: 1px solid var(--border);
+}
+.devobs-card-footer .ai-status {
+  white-space: normal;
+}
+.devobs-repair-note {
+  margin-top: 18px;
+  padding: 24px 26px;
+}
+.devobs-repair-note .ai-kicker {
+  margin: 0;
+  color: var(--mint);
+  font: 600 10px/1.5 "DM Mono", monospace;
+  letter-spacing: 0.13em;
+}
+.devobs-repair-note .ai-help {
+  margin-top: 12px;
+}
 .ai-message {
   margin: 0;
   padding: 12px 14px;
@@ -2120,6 +2304,17 @@ textarea {
   .ai-console-toolbar {
     align-items: flex-start;
   }
+  .devobs-catalog {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .devobs-source-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .devobs-repository-heading,
+  .devobs-repository-list > header {
+    flex-direction: column;
+  }
   .ai-console-toolbar label,
   .ai-inline-link {
     flex-basis: 100%;
@@ -2148,7 +2343,9 @@ textarea {
   }
   .ai-panel-heading,
   .ai-alert-header,
-  .ai-opt-in-row {
+  .ai-opt-in-row,
+  .devobs-card-heading,
+  .devobs-card-footer {
     align-items: flex-start;
     flex-direction: column;
   }
