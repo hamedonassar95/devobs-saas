@@ -9,6 +9,10 @@ The strongest products combine related alerts into an incident, correlate teleme
 
 The practical opportunity is a small-team control room that joins existing monitoring and CI signals without requiring a customer to buy a full observability suite. Build dependable health and integrations first, then add evidence-linked incident grouping, and keep code or workflow changes behind a draft pull request. Do not attempt to reproduce every vendor's storage, tracing, and analytics platform.
 
+### Current-docs verification and implementation decision
+
+On the research date, the official Datadog Bits Investigation guide says investigations may be marked inconclusive when available data cannot support a defensible conclusion. Dynatrace's current event-correlation guide describes normalization, topology, aggregation, and deduplication before problem analysis. PagerDuty's documentation ties content-based grouping to explicit event fields/metadata. GitLab documents root-cause assistance for failed CI/CD jobs. These patterns support a conservative product rule: Devobs must not infer a root cause or high confidence from a single alert alone. Until independently linked telemetry, CI, or deployment evidence exists, alert analysis is a hypothesis and confidence is capped at medium.
+
 ## Representative systems
 
 | System | Documented strength | Pattern worth borrowing for Devobs | Implication |
@@ -78,7 +82,9 @@ All links below are official product or standards documentation. Capabilities an
 - [Datadog Bits: investigate issues](https://docs.datadoghq.com/bits_ai/bits_investigation/investigate_issues/)
 - [Dynatrace Intelligence: root cause analysis](https://docs.dynatrace.com/docs/dynatrace-intelligence/root-cause-analysis)
 - [PagerDuty AIOps: event orchestration](https://docs.pagerduty.com/ai-automation/aiops/event-orchestration)
+- [PagerDuty content-based alert grouping](https://docs.pagerduty.com/ai-automation/aiops/noise-reduction/alert-grouping/content-based-alert-grouping)
 - [GitLab Duo use cases](https://docs.gitlab.com/user/gitlab_duo/use_cases/)
+- [GitLab Duo prompt guardrails](https://docs.gitlab.com/user/gitlab_duo/prompt_guardrails/)
 - [Sentry Seer](https://docs.sentry.io/product/ai-in-sentry/seer)
 - [Harness AI SRE runbook management](https://developer.harness.io/docs/ai-sre/runbooks/)
 - [incident.io AI SRE](https://incident.io/solution/ai-sre)

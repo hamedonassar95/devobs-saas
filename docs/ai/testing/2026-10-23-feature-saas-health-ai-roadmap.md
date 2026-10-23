@@ -13,8 +13,19 @@ description: Tests that protect generic health responses, safe diagnostics, and 
 - Prove only allow-listed error codes and fixed categories reach logs.
 - Prove URL, hostname, username, password, query string, and raw error-message canaries never reach logs or response bodies.
 - Run the full unit suite, TypeScript, ESLint, Prisma validation, and AI DevKit structure lint before PR creation.
+- Prove alert-only AI output cannot persist `high` confidence and its note identifies missing linked evidence.
 
 ## Unit Tests
+
+`src/lib/analysis/cloudflare.test.ts` also covers:
+
+- [x] The provider receives an alert-only evidence boundary in its system prompt.
+- [x] A model response claiming high confidence is capped at medium and the result states that linked telemetry, CI, and deployment evidence were not supplied.
+
+`src/lib/analysis/presentation.test.ts` covers:
+
+- [x] Legacy saved Cloudflare analyses with high confidence are normalized in the response without changing the saved row.
+- [x] Local, low-confidence, malformed, and unrelated model results remain unchanged.
 
 `src/app/api/health/route.test.ts` covers:
 
@@ -50,6 +61,8 @@ TDD evidence recorded 2026-10-23:
 - The PR #28 preview `/api/health` request returned HTTP 503, confirming the database runtime issue remains. Its Function log must be inspected for the new safe fields; CI success alone does not validate the database connection.
 - The Vitest coverage provider package is not installed, so no coverage percentage is reported.
 - Production build is deferred to CI because only 58 MB of workspace disk remained and `.next` output could exhaust it. Preview and post-deploy checks are still required.
+- Follow-up verification 2026-10-23: `npm test` passes 100 tests across 19 files, `npm run typecheck`, `npm run lint`, and `npx prisma validate` pass from a temporary workspace. AI DevKit install listed 28 skills, and base/feature lint passed 7/16 checks. The current workspace had 35 MB free, so dependencies and verification ran under `/tmp`; Prisma validation used placeholder localhost URLs and made no database connection.
+- The alert-only confidence guard is covered by a provider contract test that supplies a `high` model response and expects a stored `medium` confidence plus the missing-evidence note.
 
 ## Manual Testing
 

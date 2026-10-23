@@ -20,6 +20,7 @@ The product also analyzes an alert as an individual record. Representative obser
 - Update the operator runbook with safe steps for Netlify Production and Deploy Preview contexts.
 - Compare representative global products using official documentation and record a prioritized, evidence-based AI roadmap.
 - Make the AI DevKit artifacts usable for this work and future phases.
+- Prevent alert-only model output from presenting high confidence when no independently linked telemetry, CI run, or deployment evidence is provided.
 
 Non-goals for this change: repair Netlify/Neon account settings; modify or print provider secrets; add a new telemetry vendor; introduce an incident database migration; automatically merge, deploy, migrate, or mutate production; claim the hosted service is healthy.
 
@@ -37,6 +38,8 @@ Non-goals for this change: repair Netlify/Neon account settings; modify or print
 - Tests cover recognized Prisma/network codes, nested causes, code normalization, URL shape, pooled-host detection, and message-only classification.
 - Production and Deploy Previews #27 and #28 are independently identified as returning 503 until provider configuration is confirmed.
 - A dated competitive report links official sources, labels the market sample representative rather than exhaustive, and separates current code from proposed work.
+- Alert-only Cloudflare analysis treats causes as hypotheses, caps returned confidence at medium, and tells the operator which corroborating evidence is absent.
+- Previously saved Cloudflare alert analyses with `high` confidence are normalized to `medium` at the API boundary; persisted JSON is not rewritten.
 
 ## Constraints & Assumptions
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeAlertOnlyAnalysis } from "@/lib/analysis/presentation";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { requireTenantContext, requireTenantContextForPermission, TenantAccessError, TenantPermissionError, withTenantTransaction, type TenantPermission } from "@/lib/tenant/access";
@@ -23,7 +24,8 @@ export async function GET(_request: Request, context: RouteContext) {
       await requirePlanFeature(tx, tenant.organizationId, featureForResource(resource));
       return listTenantResource(tx, tenant, resource);
     });
-    return NextResponse.json({ items });
+    const responseItems = resource === "analysis-results" ? items.map(normalizeAlertOnlyAnalysis) : items;
+    return NextResponse.json({ items: responseItems });
   } catch (error) {
     if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404 });
     if (error instanceof TenantPermissionError) return NextResponse.json({ error: error.message }, { status: 403 });

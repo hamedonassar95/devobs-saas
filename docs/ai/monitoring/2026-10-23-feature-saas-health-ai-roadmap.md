@@ -18,6 +18,7 @@ description: Health, privacy, and AI quality signals for this product phase
 ### AI Quality
 
 - Continue the synthetic offline analysis corpus and record local fallback versus provider success separately.
+- Alert-only analyses must not report confidence above medium; track a future increase only after independently linked telemetry, CI, or deployment evidence is available.
 - Future incident analysis should measure evidence-link coverage, abstention quality, incorrect grouping, tenant-boundary failures, and human correction rate.
 - Do not use customer alert text in evaluation fixtures.
 

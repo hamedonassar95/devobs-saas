@@ -23,8 +23,12 @@ Use the repository's existing Node.js dependency tree. Required commands are `np
 - `safeDatabaseUrlDetails` returns only whether the environment variable is present, whether it parses as a PostgreSQL URL with a host, and whether the host looks like a pooled host. It discards the parsed URL.
 - `safeDatabaseErrorDetails` inspects at most three error/cause levels, extracts only known Prisma/network code formats, normalizes the token, and maps known codes or broad safe message patterns to a fixed category.
 - Unknown error codes and unrecognized messages are omitted.
+- Cloudflare output treats likely cause as a hypothesis when only a single alert is available; high confidence is capped at medium in application code, and the saved note lists absent telemetry/CI/deployment context.
+- The organization analysis-list API and cached-analysis response normalize legacy Cloudflare rows with high confidence to medium in the response; database rows are not rewritten.
 - The route preserves the generic no-store JSON response on both success and failure.
 - No database schema, migrations, provider integrations, or deploy workflow were changed.
+- For alert-only provider analysis, instructed the model to abstain when evidence is insufficient and added a server-side confidence cap at medium; documented that no telemetry, CI, or deployment evidence is linked yet.
+- Fixed AI DevKit setup by persisting the upstream registry and ignoring generated `.agents/` symlinks rather than tracking machine-specific links.
 
 ## Error Handling
 
@@ -49,4 +53,5 @@ The check is synchronous with the existing `SELECT 1` probe and examines at most
 - No Prisma schema, migration, GitHub workflow, Netlify setting, Neon setting, or production resource changed.
 - Unit tests, typecheck, ESLint, Prisma schema validation, and DevKit lint passed. Netlify build/preview checks passed in CI; local production build was skipped because workspace disk was 58 MB.
 - Known limitation: the current health log has not surfaced an underlying error code. The new categories improve future diagnosis but do not themselves repair the production database URL or prove which provider setting is wrong.
+- Known limitation: the new AI guard reduces overconfident presentation but does not itself add evidence correlation or prove model factual accuracy.
 - Draft PR #28's Node.js and tenant/database/Terraform/container jobs passed; Netlify preview checks passed and the preview is ready. Its `/api/health` still returns 503; production deployment was skipped.

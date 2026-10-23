@@ -15,5 +15,122 @@
   "memory": {
     "semantic": false
   },
-  "createdAt": "2026-10-23T21:41:15.005Z"
+  "createdAt": "2026-10-23T21:41:15.005Z",
+  "registries": {
+    "codeaholicguy/ai-devkit": "https://github.com/codeaholicguy/ai-devkit.git"
+  },
+  "skills": [
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "agent-communication"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "agent-management"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "ai-devkit-setup"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "remote-from-slack"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "remote-from-telegram"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-commit"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-lifecycle"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-worktree"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-requirements"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-design"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-planning"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-implementation"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-testing"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-review"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-pr"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "agent-orchestration"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-debug"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "document-code"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "memory"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "task"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-simplify"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-refactor"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "brainstorm"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "verify"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-smoke"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-retro"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "tdd"
+    },
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "session-compact"
+    }
+  ]
 }

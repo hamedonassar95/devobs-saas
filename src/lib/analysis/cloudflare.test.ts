@@ -104,6 +104,8 @@ describe("Cloudflare Workers AI alert analysis", () => {
     expect(init?.redirect).toBe("error");
     const body = JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }>; max_tokens: number };
     expect(body.messages[0].content).toContain("untrusted evidence");
+    expect(body.messages[0].content).toContain("confidence must be low or medium");
+    expect(body.messages[0].content).toContain("no linked telemetry samples, CI runs, or deployment records");
     expect(body.messages[1].content).toContain("[REDACTED_EMAIL]");
     expect(body.messages[1].content).toContain("password=[REDACTED]");
     expect(body.messages[0].content).toContain("canonical alert contract");
@@ -113,6 +115,25 @@ describe("Cloudflare Workers AI alert analysis", () => {
     expect(result.details.sourceProvider).toBe("PROMETHEUS");
     expect(result.details.nextSteps).toHaveLength(1);
     expect(result.tokenUsage).toEqual({ promptTokens: 240, completionTokens: 42 });
+  });
+
+  it("caps confidence at medium when the model has only one alert and no corroborating evidence", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      result: {
+        response: JSON.stringify({
+          summary: "The database alert needs investigation.",
+          likelyCause: "Connection capacity may be exhausted.",
+          confidence: "high",
+          nextSteps: ["Check database connection metrics and recent changes."],
+        }),
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    const result = await analyzeAlertWithCloudflare(alert, config, fetcher);
+
+    expect(result.details.confidence).toBe("medium");
+    expect(result.details.note).toContain("confidence is capped at medium");
+    expect(result.details.note).toContain("No linked telemetry, CI run, or deployment evidence");
   });
 
   it("rejects high-risk mutation advice even when the model output is valid JSON", async () => {

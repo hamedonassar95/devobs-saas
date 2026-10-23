@@ -3,6 +3,7 @@ import { analyzeAlert } from "@/lib/analysis/service";
 import { CLOUDFLARE_ANALYSIS_MODEL_ID, getCloudflareWorkersAiConfig } from "@/lib/analysis/cloudflare";
 import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, getUtcDayStart, recordAiAnalysisOutcome, reserveAiAnalysisRequest } from "@/lib/analysis/usage";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
+import { normalizeAlertOnlyAnalysis } from "@/lib/analysis/presentation";
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { TenantAccessError, TenantPermissionError, requireTenantContextForPermission, withTenantTransaction } from "@/lib/tenant/access";
 
@@ -62,7 +63,7 @@ export async function POST(_request: Request, context: RouteContext) {
       return result;
     });
     if (!prepared) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (prepared.cached) return NextResponse.json({ item: prepared.cached }, { status: 200 });
+    if (prepared.cached) return NextResponse.json({ item: normalizeAlertOnlyAnalysis(prepared.cached) }, { status: 200 });
 
     let analysis = await analyzeAlert({
       title: prepared.alert.title,

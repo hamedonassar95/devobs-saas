@@ -14,6 +14,7 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 - [x] M3: Implement safe health logging and operator troubleshooting guidance.
 - [x] M4: Run local unit/type/lint/schema/DevKit gates and prepare a reviewable change; CI handles the build because local disk is nearly full.
 - [ ] M5: Owner confirms Netlify/Neon contexts; fresh deployed health checks return HTTP 200.
+- [x] M6: Harden alert-only AI confidence, refresh the evidence-based research, and make AI DevKit setup reproducible.
 
 ## Task Breakdown
 
@@ -26,6 +27,9 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 | T5 | done | Run local quality gates and review the diff for regressions/secrets. | T3–T4 | 97 tests pass; typecheck, ESLint, Prisma validation, base/feature lint, and `git diff --check` pass. Production build is reserved for CI due to low disk. |
 | T6 | done | Open a draft PR to `main` and inspect CI/preview. | T5; GitHub write access | Draft PR #28 is open; Node, tenant/database, Terraform/container, header, redirect, and Netlify preview checks passed. The preview is ready but `/api/health` remains 503. Production deploy was skipped. |
 | T7 | blocked | Confirm owner-controlled Netlify variables and resolve live 503 in each context. | T6; Netlify/Neon owner access | Fresh Production and Preview checks must each return HTTP 200; no secret values shared. |
+| T8 | done | Treat single-alert AI causes as hypotheses and cap provider confidence at medium until independently linked evidence is supplied. | T1–T4 | Prompt contract and server-side cap; tests cover new model output and legacy saved results. |
+| T9 | done | Refresh peer research from current official docs and record the AI DevKit registry with generated skills excluded from source control. | T8 | Report cites current Datadog, Dynatrace, PagerDuty, and GitLab docs; `.agents/` is ignored while the registry remains in `.ai-devkit.json`. |
+| T10 | done | Verify the scoped implementation and update phase evidence. | T8–T9 | 100 unit tests, TypeScript, ESLint, Prisma schema, and AI DevKit base/feature lint pass from a temporary workspace because the main filesystem is nearly full. |
 
 ### Sequencing notes
 
@@ -57,3 +61,5 @@ description: Ordered, reviewable work for health diagnostics and future AI incid
 ## Progress summary
 
 Health diagnostics, test-first evidence, provider research, operator documentation, and the draft PR are complete. Local gates and required CI checks passed; the new preview is ready. Production and preview health still return 503, so owner-controlled provider-context confirmation is the blocker. Incident grouping, OpenTelemetry ingestion, and evidence-backed multi-signal analysis remain separately planned future work and were not silently added to this patch.
+
+The alert-only AI confidence guard and research/DevKit updates are also implemented and verified locally. T7 remains blocked by the owner-controlled Netlify/Neon runtime context; multi-signal incident correlation remains a separate schema/design milestone.
