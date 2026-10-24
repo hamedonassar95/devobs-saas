@@ -1,5 +1,5 @@
 import type { CiCdIntegration, CiCdProvider } from "@prisma/client";
-import { readBoundedResponseJson } from "@/lib/http/bounded-json";
+import { BoundedResponseJsonError, readBoundedResponseJson } from "@/lib/http/bounded-json";
 
 export type PipelineRun = {
   id: string;
@@ -75,8 +75,15 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
   }
   try {
     return await readBoundedResponseJson(response, 1_048_576);
-  } catch {
-    throw new ProviderRequestError("The CI/CD provider returned an invalid or oversized response.", 502);
+  } catch (error) {
+    if (!(error instanceof BoundedResponseJsonError)) throw error;
+    if (error.code === "too-large") {
+      throw new ProviderRequestError("The CI/CD provider response was too large.", 502);
+    }
+    if (error.code === "unavailable") {
+      throw new ProviderRequestError("The CI/CD provider returned an empty response.", 502);
+    }
+    throw new ProviderRequestError("The CI/CD provider returned invalid JSON.", 502);
   }
 }
 

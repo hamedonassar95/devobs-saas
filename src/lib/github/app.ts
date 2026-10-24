@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, sign as signJwt, timingSafeEqual } from "node:crypto";
-import { readBoundedResponseJson } from "@/lib/http/bounded-json";
+import { BoundedResponseJsonError, readBoundedResponseJson } from "@/lib/http/bounded-json";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_API_VERSION = "2022-11-28";
@@ -121,8 +121,11 @@ export function verifyInstallState(config: GitHubAppConfig, signedState: string,
 async function readJson(response: Response): Promise<unknown> {
   try {
     return await readBoundedResponseJson(response, MAX_RESPONSE_BYTES);
-  } catch {
-    throw new GitHubAppError("GitHub returned an invalid or oversized response.");
+  } catch (error) {
+    if (!(error instanceof BoundedResponseJsonError)) throw error;
+    if (error.code === "too-large") throw new GitHubAppError("GitHub returned an oversized response.");
+    if (error.code === "unavailable") throw new GitHubAppError("GitHub returned an empty response.");
+    throw new GitHubAppError("GitHub returned invalid JSON.");
   }
 }
 

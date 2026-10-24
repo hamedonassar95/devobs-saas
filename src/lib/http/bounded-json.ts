@@ -5,6 +5,15 @@ export type BoundedBytesResult =
   | { tooLarge: true }
   | { invalid: true };
 
+export type BoundedResponseJsonErrorCode = "too-large" | "unavailable" | "invalid-json";
+
+export class BoundedResponseJsonError extends Error {
+  constructor(readonly code: BoundedResponseJsonErrorCode) {
+    super("Provider response could not be safely parsed");
+    this.name = "BoundedResponseJsonError";
+  }
+}
+
 /** Read a request or response stream with a hard byte ceiling before parsing. */
 export async function readBoundedBytes(
   body: ReadableStream<Uint8Array> | null,
@@ -81,12 +90,12 @@ export async function readBoundedResponseJson(response: Response, maxBytes: numb
     response.headers.get("content-length"),
     maxBytes,
   );
-  if ("tooLarge" in result) throw new Error("Provider response is too large");
-  if ("invalid" in result) throw new Error("Provider response body is unavailable");
+  if ("tooLarge" in result) throw new BoundedResponseJsonError("too-large");
+  if ("invalid" in result) throw new BoundedResponseJsonError("unavailable");
 
   try {
     return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.bytes)) as unknown;
   } catch {
-    throw new Error("Provider response is invalid JSON");
+    throw new BoundedResponseJsonError("invalid-json");
   }
 }
