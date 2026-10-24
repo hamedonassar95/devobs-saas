@@ -10,16 +10,25 @@ export function isTenantResource(value: string): value is TenantResourceName {
   return TENANT_RESOURCES.includes(value as TenantResourceName);
 }
 
-export async function listTenantResource(client: Prisma.TransactionClient, tenant: TenantContext, resource: TenantResourceName) {
+export async function listTenantResource(
+  client: Prisma.TransactionClient,
+  tenant: TenantContext,
+  resource: TenantResourceName,
+  page: { take: number; cursor?: string } = { take: 100 },
+) {
+  const pagination = {
+    take: page.take,
+    ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
+  };
   switch (resource) {
     case "integrations":
-      return client.ciCdIntegration.findMany({ where: tenantWhere(tenant.organizationId) as Prisma.CiCdIntegrationWhereInput, orderBy: { createdAt: "desc" } });
+      return client.ciCdIntegration.findMany({ where: tenantWhere(tenant.organizationId) as Prisma.CiCdIntegrationWhereInput, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...pagination });
     case "monitoring-sources":
-      return client.monitoringSource.findMany({ where: tenantWhere(tenant.organizationId) as Prisma.MonitoringSourceWhereInput, orderBy: { createdAt: "desc" } });
+      return client.monitoringSource.findMany({ where: tenantWhere(tenant.organizationId) as Prisma.MonitoringSourceWhereInput, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...pagination });
     case "alerts":
-      return client.alert.findMany({ where: tenantWhere(tenant.organizationId) as Prisma.AlertWhereInput, orderBy: { openedAt: "desc" } });
+      return client.alert.findMany({ where: tenantWhere(tenant.organizationId) as Prisma.AlertWhereInput, orderBy: [{ openedAt: "desc" }, { id: "desc" }], ...pagination });
     case "analysis-results":
-      return client.analysisResult.findMany({ where: tenantWhere(tenant.organizationId) as Prisma.AnalysisResultWhereInput, orderBy: { createdAt: "desc" } });
+      return client.analysisResult.findMany({ where: tenantWhere(tenant.organizationId) as Prisma.AnalysisResultWhereInput, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...pagination });
   }
 }
 

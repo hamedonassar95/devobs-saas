@@ -1,10 +1,6 @@
-type AlertForRuleAnalysis = {
-  title: string;
-  description: string | null;
-  severity: "INFO" | "WARNING" | "CRITICAL";
-  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
-  sourceProvider?: "PROMETHEUS" | "GRAFANA" | null;
-};
+import { buildAlertEvidenceScope, type AlertEvidenceInput } from "./evidence";
+
+type AlertForRuleAnalysis = AlertEvidenceInput;
 
 export type RuleBasedAnalysis = {
   summary: string;
@@ -13,6 +9,7 @@ export type RuleBasedAnalysis = {
     severity: AlertForRuleAnalysis["severity"];
     status: AlertForRuleAnalysis["status"];
     sourceProvider: NonNullable<AlertForRuleAnalysis["sourceProvider"]> | null;
+    evidenceScope: ReturnType<typeof buildAlertEvidenceScope>;
     nextSteps: string[];
     note: string;
   };
@@ -54,6 +51,7 @@ export function analyzeAlertWithLocalRules(alert: AlertForRuleAnalysis): RuleBas
       severity: alert.severity,
       status: alert.status,
       sourceProvider: alert.sourceProvider ?? null,
+      evidenceScope: buildAlertEvidenceScope(alert),
       nextSteps,
       note: "Generated locally from fixed rules. No AI model or external provider was called, and no alert data left the application.",
     },

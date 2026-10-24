@@ -1,0 +1,70 @@
+---
+phase: planning
+title: Safe Health Diagnostics and Evidence-Backed AI Roadmap
+feature: saas-health-ai-roadmap
+description: Ordered, reviewable work for health diagnostics and future AI incident workflows
+---
+
+# Project Planning & Task Breakdown
+
+## Milestones
+
+- [x] M1: Verify current app and provider health; establish test-first diagnostic change.
+- [x] M2: Research representative peer systems from official documents and record a staged roadmap.
+- [x] M3: Implement safe health logging and operator troubleshooting guidance.
+- [x] M4: Run local unit/type/lint/schema/DevKit gates and prepare a reviewable change; CI handles the build because local disk is nearly full.
+- [ ] M5: Owner confirms Netlify/Neon contexts; fresh deployed health checks return HTTP 200.
+- [x] M6: Harden alert-only AI confidence, refresh the evidence-based research, and make AI DevKit setup reproducible.
+- [x] M7: Show the exact scope of available alert fields and unlinked corroborating signals with each new analysis.
+
+## Task Breakdown
+
+| ID | Status | Outcome | Depends on | Validation evidence / scenario |
+| --- | --- | --- | --- | --- |
+| T1 | done | Record current SaaS runtime state and compare representative products using primary docs. | — | Live production and preview health checks both returned 503; report links official sources. |
+| T2 | done | Specify safe health diagnostics and non-disclosure behavior in failing tests. | T1 | Baseline route suite failed on missing URL-shape/category fields before implementation. |
+| T3 | done | Add URL-shape booleans, pooled-host hint, allow-listed error codes, and fixed categories. | T2 | 13 targeted health-route tests pass; canaries assert URL and raw error text are absent. |
+| T4 | done | Write Netlify/Neon runbook and complete the seven AI DevKit phase artifacts. | T1–T3 | `npx ai-devkit@latest lint` passes; troubleshooting keeps production and preview separate. |
+| T5 | done | Run local quality gates and review the diff for regressions/secrets. | T3–T4 | 97 tests pass; typecheck, ESLint, Prisma validation, base/feature lint, and `git diff --check` pass. Production build is reserved for CI due to low disk. |
+| T6 | done | Open a draft PR to `main` and inspect CI/preview. | T5; GitHub write access | Draft PR #28 is open; Node, tenant/database, Terraform/container, header, redirect, and Netlify preview checks passed. The preview is ready but `/api/health` remains 503. Production deploy was skipped. |
+| T7 | blocked | Confirm owner-controlled Netlify variables and resolve live 503 in each context. | T6; Netlify/Neon owner access | Fresh Production and Preview checks must each return HTTP 200; no secret values shared. |
+| T8 | done | Treat single-alert AI causes as hypotheses and cap provider confidence at medium until independently linked evidence is supplied. | T1–T4 | Prompt contract and server-side cap; tests cover new model output and legacy saved results. |
+| T9 | done | Refresh peer research from current official docs and record the AI DevKit registry with generated skills excluded from source control. | T8 | Report cites current Datadog, Dynatrace, PagerDuty, and GitLab docs; `.agents/` is ignored while the registry remains in `.ai-devkit.json`. |
+| T10 | done | Verify the scoped implementation and update phase evidence. | T8–T9 | 100 unit tests, TypeScript, ESLint, Prisma schema, and AI DevKit base/feature lint pass from a temporary workspace because the main filesystem is nearly full. |
+| T11 | done | Persist and display an allow-listed evidence-scope summary for new local and provider analysis results. | T8 | 105 tests and a temporary-workspace production build pass; typecheck, ESLint, Prisma validation, DevKit lint, and `git diff --check` pass. |
+
+### Sequencing notes
+
+- T1–T4 are implementation/documentation work completed in this branch.
+- T5 must pass before PR creation; if the low-disk environment blocks a gate, record the exact command and limitation rather than skipping silently.
+- T6 is complete as a review checkpoint. Do not merge or publish automatically.
+- T7 cannot be completed from the repository because provider settings and secrets are owner-controlled.
+- Task tracing was probed with `npx ai-devkit@latest task list --name saas-health-ai-roadmap --json`; this CLI version returned `unknown command 'task'`. Continue without task events and record the limitation.
+
+## Dependencies
+
+- Existing repository dependency tree is reused because the workspace has only about 58 MB free; do not run `npm ci` or a production build that would require a large cache/output.
+- PR creation depends on authenticated GitHub write access to the SaaS repository.
+- Root-cause confirmation depends on owner-controlled Netlify and Neon settings/logs; no credentials are requested or accessed.
+
+## Risks & Mitigation
+
+- A boolean indicating PostgreSQL URL shape can be mistaken for connectivity. Name it precisely and document the limitation.
+- Message-based classification may not recognize a new provider error. Keep the public response generic and omit unknown categories rather than logging raw text.
+- A successful Neon SQL query can be run against a different project/branch from the Netlify function. Verify environment context separately.
+- Free hosting tiers have strict limits and no availability commitment; retain a limited-pilot status.
+- AI-generated repair can be wrong. Keep repairs as draft PRs, with tests and human review before merge/deploy.
+
+## Resources Needed
+
+- Existing test/type/lint tools in the repository's installed dependency tree.
+- Official vendor documentation linked in `docs/competitive-landscape-2026-10-23.md`.
+- Owner access to Netlify and Neon for the final context check; no secret values need to be shared.
+
+## Progress summary
+
+Health diagnostics, test-first evidence, provider research, operator documentation, and the draft PR are complete. Local gates and required CI checks passed; the new preview is ready. Production and preview health still return 503, so owner-controlled provider-context confirmation is the blocker. Incident grouping, OpenTelemetry ingestion, and evidence-backed multi-signal analysis remain separately planned future work and were not silently added to this patch.
+
+The alert-only AI confidence guard and research/DevKit updates are also implemented and verified locally. T7 remains blocked by the owner-controlled Netlify/Neon runtime context; multi-signal incident correlation remains a separate schema/design milestone.
+
+T11 implementation and local verification are complete. Evidence-scope metadata is included with new alert analyses and displayed separately from likely cause and confidence. The change still needs an updated PR/CI run.

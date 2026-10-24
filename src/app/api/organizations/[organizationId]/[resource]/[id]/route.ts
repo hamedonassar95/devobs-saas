@@ -4,6 +4,7 @@ import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/b
 import { requireTenantContext, requireTenantContextForPermission, TenantAccessError, TenantPermissionError, withTenantTransaction } from "@/lib/tenant/access";
 import { deleteTenantResource, getTenantResource, isTenantResource, updateTenantResource } from "@/lib/tenant/resources";
 import { tenantResourceSchemas } from "@/lib/tenant/resource-schemas";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 type RouteContext = { params: Promise<{ organizationId: string; resource: string; id: string }> };
 
@@ -32,7 +33,11 @@ export async function GET(_request: Request, context: RouteContext) {
 export async function PATCH(request: Request, context: RouteContext) {
   const { organizationId, resource, id } = await context.params;
   if (!isTenantResource(resource)) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const parsed = partialResourceSchema(resource).safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, 32 * 1024);
+  if (body && "tooLarge" in body) {
+    return NextResponse.json({ error: "The resource request is too large." }, { status: 413 });
+  }
+  const parsed = partialResourceSchema(resource).safeParse(body?.data ?? null);
   if (!parsed.success || Object.keys(parsed.data ?? {}).length === 0) return NextResponse.json({ error: "Invalid resource data." }, { status: 400 });
   try {
     const tenant = await requireTenantContextForPermission(await getAuthenticatedUserId(), organizationId, "write");

@@ -7,6 +7,7 @@ import { CLOUDFLARE_AI_PRICING_CHECKED_ON, getDailyAiRequestLimit, getPlatformDa
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { planIncludesFeature } from "@/lib/billing/plans";
 import { TenantAccessError, TenantPermissionError, requireTenantContextForPermission, withTenantTransaction } from "@/lib/tenant/access";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 type RouteContext = { params: Promise<{ organizationId: string }> };
 const settingSchema = z.object({ enabled: z.boolean() }).strict();
@@ -114,7 +115,11 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   const { organizationId } = await context.params;
-  const parsed = settingSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, 1024);
+  if (body && "tooLarge" in body) {
+    return NextResponse.json({ error: "The AI settings request is too large." }, { status: 413 });
+  }
+  const parsed = settingSchema.safeParse(body?.data ?? null);
   if (!parsed.success) return NextResponse.json({ error: "Invalid AI setting." }, { status: 400 });
   try {
     const tenant = await requireTenantContextForPermission(await getAuthenticatedUserId(), organizationId, "admin");

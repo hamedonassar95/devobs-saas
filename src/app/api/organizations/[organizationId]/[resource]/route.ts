@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
+import { normalizeAlertOnlyAnalysis } from "@/lib/analysis/presentation";
 import { getAuthenticatedUserId } from "@/lib/auth/session";
 import { featureForResource, PlanAccessError, requirePlanFeature } from "@/lib/billing/entitlements";
 import { requireTenantContext, requireTenantContextForPermission, TenantAccessError, TenantPermissionError, withTenantTransaction, type TenantPermission } from "@/lib/tenant/access";
 import { createTenantMonitoringSource, createTenantResource, isTenantResource, listTenantResource } from "@/lib/tenant/resources";
 import { tenantResourceSchemas } from "@/lib/tenant/resource-schemas";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 type RouteContext = { params: Promise<{ organizationId: string; resource: string }> };
+const RESOURCE_PAGE_SIZE = 100;
 
 async function getTenant(organizationId: string, permission: TenantPermission = "read") {
   const userId = await getAuthenticatedUserId();
@@ -14,16 +17,29 @@ async function getTenant(organizationId: string, permission: TenantPermission = 
     : requireTenantContextForPermission(userId, organizationId, permission);
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const { organizationId, resource } = await context.params;
   if (!isTenantResource(resource)) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const cursor = new URL(request.url).searchParams.get("cursor") ?? undefined;
+  if (cursor !== undefined && !/^[A-Za-z0-9_-]{1,100}$/.test(cursor)) {
+    return NextResponse.json({ error: "Invalid resource cursor." }, { status: 400 });
+  }
   try {
     const tenant = await getTenant(organizationId);
     const items = await withTenantTransaction(tenant, async (tx) => {
       await requirePlanFeature(tx, tenant.organizationId, featureForResource(resource));
-      return listTenantResource(tx, tenant, resource);
+      return listTenantResource(tx, tenant, resource, {
+        take: RESOURCE_PAGE_SIZE + 1,
+        ...(cursor ? { cursor } : {}),
+      });
     });
-    return NextResponse.json({ items });
+    const hasMore = items.length > RESOURCE_PAGE_SIZE;
+    const pageItems = hasMore ? items.slice(0, RESOURCE_PAGE_SIZE) : items;
+    const responseItems = resource === "analysis-results" ? pageItems.map(normalizeAlertOnlyAnalysis) : pageItems;
+    return NextResponse.json({
+      items: responseItems,
+      nextCursor: hasMore ? pageItems.at(-1)?.id ?? null : null,
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404 });
     if (error instanceof TenantPermissionError) return NextResponse.json({ error: error.message }, { status: 403 });
@@ -35,7 +51,11 @@ export async function GET(_request: Request, context: RouteContext) {
 export async function POST(request: Request, context: RouteContext) {
   const { organizationId, resource } = await context.params;
   if (!isTenantResource(resource)) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const parsed = tenantResourceSchemas[resource].safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, 32 * 1024);
+  if (body && "tooLarge" in body) {
+    return NextResponse.json({ error: "The resource request is too large." }, { status: 413 });
+  }
+  const parsed = tenantResourceSchemas[resource].safeParse(body?.data ?? null);
   if (!parsed.success) return NextResponse.json({ error: "Invalid resource data." }, { status: 400 });
   try {
     const tenant = await getTenant(organizationId, "write");

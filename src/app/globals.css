@@ -2071,6 +2071,40 @@ textarea {
 .ai-analysis-result .ai-help {
   color: var(--muted);
 }
+.ai-evidence-scope {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid rgba(133, 237, 189, 0.15);
+  border-radius: 8px;
+  background: rgba(5, 11, 8, 0.32);
+}
+.ai-evidence-scope h4 {
+  margin: 0 0 10px;
+  color: var(--mint);
+  font-size: 12px;
+}
+.ai-evidence-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.ai-evidence-scope-grid strong {
+  color: #d7e1dc;
+  font-size: 12px;
+}
+.ai-evidence-scope-grid ul {
+  margin: 6px 0 0;
+}
+.ai-evidence-scope-grid li {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 520px) {
+  .ai-evidence-scope-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .devobs-control-room .ai-console-intro {
   max-width: 900px;
 }
