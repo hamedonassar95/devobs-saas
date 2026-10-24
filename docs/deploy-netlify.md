@@ -56,9 +56,11 @@ For billing and contact features, add these server-side values when those integr
 | `STRIPE_PRICE_MONITORING` | Monthly Stripe Price ID for Monitoring |
 | `STRIPE_PRICE_CICD` | Monthly Stripe Price ID for CI/CD |
 | `STRIPE_PRICE_FULL` | Monthly Stripe Price ID for Full with AI |
-| `RESEND_API_KEY` | Resend API key for the contact form |
+| `RESEND_API_KEY` | Resend API key for contact and account-verification email |
 | `CONTACT_EMAIL` | Inbox receiving contact requests |
-| `CONTACT_FROM_EMAIL` | Sender verified with Resend |
+| `CONTACT_FROM_EMAIL` | Sender verified with Resend; account-verification links use the same sender |
+
+New registrations require a working Resend configuration before users can finish signup. Set `APP_URL` to the public HTTPS origin for each deploy context and use a sender address on a domain verified in Resend. Users choose their password after opening the verification link. A missing or rejected email configuration does not create a session; users can request another link from `/verify-email` after configuration is corrected. See [email verification behavior](./email-verification.md).
 
 Keep the optional Cloudflare Workers AI integration disabled unless its own free-plan limits and account configuration are verified. No model is called by the Netlify deploy workflow. To configure and operate it after deployment, follow [the AI integration runbook](./ai-integration-runbook.md); signed-in customers use `/dashboard/ai` for provider status, organization opt-in, alert analysis, and usage estimates. Monitoring-source creation remains API-managed.
 

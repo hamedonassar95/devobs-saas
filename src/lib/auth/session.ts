@@ -28,10 +28,18 @@ export async function getAuthenticatedUserId(): Promise<string | null> {
   if (!token) return null;
   const session = await prisma.session.findUnique({
     where: { tokenHash: hashToken(token) },
-    select: { userId: true, expiresAt: true },
+    select: {
+      userId: true,
+      expiresAt: true,
+      user: { select: { emailVerificationRequired: true, emailVerifiedAt: true } },
+    },
   });
   if (!session) return null;
   if (session.expiresAt.getTime() <= Date.now()) {
+    await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } });
+    return null;
+  }
+  if (session.user.emailVerificationRequired && !session.user.emailVerifiedAt) {
     await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } });
     return null;
   }

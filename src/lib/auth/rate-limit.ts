@@ -7,6 +7,9 @@ const DAY = 24 * 60 * MINUTE;
 const RATE_LIMITS = {
   login: { maxAttempts: 10, windowMs: 15 * MINUTE },
   register: { maxAttempts: 4, windowMs: 15 * MINUTE },
+  emailVerification: { maxAttempts: 3, windowMs: 15 * MINUTE },
+  emailVerificationGlobal: { maxAttempts: 100, windowMs: DAY },
+  emailVerificationConfirm: { maxAttempts: 10, windowMs: 15 * MINUTE },
   contactEmail: { maxAttempts: 4, windowMs: 10 * MINUTE },
   contactGlobal: { maxAttempts: 50, windowMs: DAY },
 } as const;
