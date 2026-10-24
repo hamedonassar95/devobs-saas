@@ -28,7 +28,10 @@ export async function POST(_request: Request, context: RouteContext) {
     });
     if (!sourceExists) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const webhookPath = `/api/webhooks/monitoring/${encodeURIComponent(organizationId)}/${encodeURIComponent(sourceId)}`;
-    return NextResponse.json({ webhookPath, webhookToken }, { status: 200 });
+    return NextResponse.json(
+      { webhookPath, webhookToken },
+      { status: 200, headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     if (error instanceof TenantAccessError) return NextResponse.json({ error: error.message }, { status: 404 });
     if (error instanceof TenantPermissionError) return NextResponse.json({ error: error.message }, { status: 403 });

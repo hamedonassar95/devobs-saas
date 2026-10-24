@@ -6,6 +6,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { consumeAuthAttempt, resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { prisma } from "@/lib/db";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 function createSlug(name: string): string {
   const base = name.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "team";
@@ -13,7 +14,11 @@ function createSlug(name: string): string {
 }
 
 export async function POST(request: Request) {
-  const parsed = registrationSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, 16 * 1024);
+  if (body && "tooLarge" in body) {
+    return NextResponse.json({ error: "The registration request is too large." }, { status: 413 });
+  }
+  const parsed = registrationSchema.safeParse(body?.data ?? null);
   if (!parsed.success) return NextResponse.json({ error: "Invalid registration details." }, { status: 400 });
 
   const email = parsed.data.email.trim().toLowerCase();

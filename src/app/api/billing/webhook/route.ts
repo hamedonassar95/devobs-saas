@@ -6,6 +6,9 @@ import { planForStripePrice } from "@/lib/billing/plans";
 import { prisma } from "@/lib/db";
 import { getStripe } from "@/lib/stripe/client";
 import { applyStripeSubscriptionSnapshot } from "@/lib/billing/stripe-events";
+import { readBoundedBytes } from "@/lib/http/bounded-json";
+
+const MAX_STRIPE_WEBHOOK_BYTES = 1_000_000;
 
 function dateFromUnix(value: number | null): Date | null {
   return value === null ? null : new Date(value * 1000);
@@ -51,12 +54,17 @@ export async function POST(request: Request) {
   if (!signature || !webhookSecret || !process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: "Webhook is not configured." }, { status: 503 });
   }
-  const payload = await request.text();
-  if (payload.length > 1_000_000) return NextResponse.json({ error: "Webhook payload is too large." }, { status: 413 });
+  const payload = await readBoundedBytes(
+    request.body,
+    request.headers.get("content-length"),
+    MAX_STRIPE_WEBHOOK_BYTES,
+  );
+  if ("tooLarge" in payload) return NextResponse.json({ error: "Webhook payload is too large." }, { status: 413 });
+  if ("invalid" in payload) return NextResponse.json({ error: "Invalid webhook payload." }, { status: 400 });
 
   let event: Stripe.Event;
   try {
-    event = getStripe().webhooks.constructEvent(payload, signature, webhookSecret);
+    event = getStripe().webhooks.constructEvent(Buffer.from(payload.bytes), signature, webhookSecret);
   } catch {
     return NextResponse.json({ error: "Invalid webhook signature." }, { status: 400 });
   }

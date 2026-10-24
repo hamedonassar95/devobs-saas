@@ -1,4 +1,5 @@
 import type { CiCdIntegration, CiCdProvider } from "@prisma/client";
+import { readBoundedResponseJson } from "@/lib/http/bounded-json";
 
 export type PipelineRun = {
   id: string;
@@ -68,34 +69,14 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
     throw new ProviderRequestError("The CI/CD provider could not be reached.", 502);
   }
 
-  if (!response.ok) throw new ProviderRequestError("The CI/CD provider rejected the read-only request.", response.status === 401 || response.status === 403 ? 400 : 502);
-  const declaredLength = response.headers.get("content-length");
-  if (declaredLength && Number(declaredLength) > 1_048_576) throw new ProviderRequestError("The CI/CD provider response was too large.", 502);
-  const reader = response.body?.getReader();
-  if (!reader) throw new ProviderRequestError("The CI/CD provider returned an empty response.", 502);
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > 1_048_576) {
-      await reader.cancel();
-      throw new ProviderRequestError("The CI/CD provider response was too large.", 502);
-    }
-    chunks.push(value);
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ProviderRequestError("The CI/CD provider rejected the read-only request.", response.status === 401 || response.status === 403 ? 400 : 502);
   }
-  const responseBytes = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    responseBytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  const text = new TextDecoder().decode(responseBytes);
   try {
-    return JSON.parse(text) as unknown;
+    return await readBoundedResponseJson(response, 1_048_576);
   } catch {
-    throw new ProviderRequestError("The CI/CD provider returned invalid JSON.", 502);
+    throw new ProviderRequestError("The CI/CD provider returned an invalid or oversized response.", 502);
   }
 }
 

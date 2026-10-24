@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 export type IncomingAlert = {
   externalId: string;
@@ -98,33 +99,8 @@ export function parseAlertmanagerPayload(value: unknown): IncomingAlert[] {
 }
 
 export async function readJsonBodyLimited(request: Request, maxBytes: number): Promise<unknown> {
-  const declaredLength = request.headers.get("content-length");
-  if (declaredLength && Number(declaredLength) > maxBytes) throw new MonitoringPayloadError("Webhook request is too large.");
-  if (!request.body) throw new MonitoringPayloadError("Webhook request body is required.");
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > maxBytes) {
-      await reader.cancel();
-      throw new MonitoringPayloadError("Webhook request is too large.");
-    }
-    chunks.push(value);
-  }
-
-  const body = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    return JSON.parse(new TextDecoder().decode(body)) as unknown;
-  } catch {
-    throw new MonitoringPayloadError("Webhook request body must be valid JSON.");
-  }
+  const body = await readBoundedJson(request, maxBytes);
+  if (body && "tooLarge" in body) throw new MonitoringPayloadError("Webhook request is too large.");
+  if (!body) throw new MonitoringPayloadError("Webhook request body must be valid JSON.");
+  return body.data;
 }

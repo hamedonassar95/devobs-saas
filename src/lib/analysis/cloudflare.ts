@@ -2,11 +2,13 @@ import { z } from "zod";
 import { getDailyAiRequestLimit, getPlatformDailyAiRequestLimit, type AiTokenUsage } from "@/lib/analysis/usage";
 import { buildAlertEvidenceScope, type AlertEvidenceInput } from "./evidence";
 import { containsUnsafeMutationAdvice } from "./output-safety.mjs";
+import { readBoundedResponseJson } from "@/lib/http/bounded-json";
 
 export const CLOUDFLARE_ANALYSIS_MODEL_ID = "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8";
 const CLOUDFLARE_MODEL_PATH = "@cf/meta/llama-3.1-8b-instruct-fp8";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_ALERT_TEXT_LENGTH = 1_500;
+const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024;
 
 export type AlertForAiAnalysis = AlertEvidenceInput;
 
@@ -173,7 +175,7 @@ export async function analyzeAlertWithCloudflare(
   }
 
   if (!response.ok) throw new Error("Cloudflare Workers AI request failed");
-  const body: unknown = await response.json().catch(() => null);
+  const body = await readBoundedResponseJson(response, MAX_PROVIDER_RESPONSE_BYTES);
   const text = extractModelText(body);
   if (!text) throw new Error("Cloudflare Workers AI returned an invalid response");
   const parsed = parseModelOutput(text);

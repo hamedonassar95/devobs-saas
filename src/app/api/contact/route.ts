@@ -57,6 +57,7 @@ export async function POST(request: Request) {
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      redirect: "error",
       headers: {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
       }),
       signal: AbortSignal.timeout(10_000),
     });
+    await response.body?.cancel().catch(() => undefined);
     if (!response.ok)
       return NextResponse.json(
         { error: "We couldn't send your message. Please try again later." },

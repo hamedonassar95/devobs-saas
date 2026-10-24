@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getAiDashboardAccess } from "@/lib/analysis/dashboard-access";
 import {
   ALERT_EVIDENCE_FIELD_LABELS,
@@ -108,6 +108,9 @@ export default function AiControls({ organizations }: { organizations: Organizat
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [analyses, setAnalyses] = useState<AnalysisItem[]>([]);
+  const [alertsNextCursor, setAlertsNextCursor] = useState<string | null>(null);
+  const [analysesNextCursor, setAnalysesNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState<"alerts" | "analysis-results" | null>(null);
   const [loading, setLoading] = useState(Boolean(organizations.length));
   const [alertsMessage, setAlertsMessage] = useState("");
   const [analysesMessage, setAnalysesMessage] = useState("");
@@ -115,6 +118,8 @@ export default function AiControls({ organizations }: { organizations: Organizat
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [busyAlertId, setBusyAlertId] = useState<string | null>(null);
+  const activeOrganizationId = useRef(organizationId);
+  activeOrganizationId.current = organizationId;
 
   const organization = organizations.find((item) => item.id === organizationId);
   const access = useMemo(() => getAiDashboardAccess(organization?.role ?? "VIEWER", {
@@ -136,6 +141,9 @@ export default function AiControls({ organizations }: { organizations: Organizat
       setSettings(null);
       setAlerts([]);
       setAnalyses([]);
+      setAlertsNextCursor(null);
+      setAnalysesNextCursor(null);
+      setLoadingMore(null);
       setLoading(false);
       return;
     }
@@ -146,6 +154,9 @@ export default function AiControls({ organizations }: { organizations: Organizat
     setSettings(null);
     setAlerts([]);
     setAnalyses([]);
+    setAlertsNextCursor(null);
+    setAnalysesNextCursor(null);
+    setLoadingMore(null);
     setError("");
     setNotice("");
     setAlertsMessage("");
@@ -170,12 +181,14 @@ export default function AiControls({ organizations }: { organizations: Organizat
 
       if (alertsResponse.ok && isRecord(alertsBody) && Array.isArray(alertsBody.items)) {
         setAlerts(alertsBody.items as Alert[]);
+        setAlertsNextCursor(typeof alertsBody.nextCursor === "string" ? alertsBody.nextCursor : null);
       } else {
         setAlertsMessage(errorFrom(alertsBody, "Unable to load alerts."));
       }
 
       if (analysesResponse.ok && isRecord(analysesBody) && Array.isArray(analysesBody.items)) {
         setAnalyses(analysesBody.items as AnalysisItem[]);
+        setAnalysesNextCursor(typeof analysesBody.nextCursor === "string" ? analysesBody.nextCursor : null);
       } else {
         setAnalysesMessage(errorFrom(analysesBody, "Unable to load saved analyses."));
       }
@@ -196,6 +209,38 @@ export default function AiControls({ organizations }: { organizations: Organizat
       controller.abort();
     };
   }, [organizationId]);
+
+  async function loadOlder(resource: "alerts" | "analysis-results") {
+    const cursor = resource === "alerts" ? alertsNextCursor : analysesNextCursor;
+    if (!organizationId || !cursor || loadingMore) return;
+    const requestedOrganizationId = organizationId;
+    setLoadingMore(resource);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/organizations/${encodeURIComponent(requestedOrganizationId)}/${resource}?cursor=${encodeURIComponent(cursor)}`,
+        { cache: "no-store" },
+      );
+      const body = await readJson(response);
+      if (!response.ok || !isRecord(body) || !Array.isArray(body.items)) {
+        throw new Error(errorFrom(body, "Unable to load older records."));
+      }
+      if (activeOrganizationId.current !== requestedOrganizationId) return;
+      if (resource === "alerts") {
+        setAlerts((current) => [...current, ...(body.items as Alert[])]);
+        setAlertsNextCursor(typeof body.nextCursor === "string" ? body.nextCursor : null);
+      } else {
+        setAnalyses((current) => [...current, ...(body.items as AnalysisItem[])]);
+        setAnalysesNextCursor(typeof body.nextCursor === "string" ? body.nextCursor : null);
+      }
+    } catch (cause) {
+      if (activeOrganizationId.current === requestedOrganizationId) {
+        setError(cause instanceof Error ? cause.message : "Unable to load older records.");
+      }
+    } finally {
+      if (activeOrganizationId.current === requestedOrganizationId) setLoadingMore(null);
+    }
+  }
 
   async function changeAiSetting() {
     if (!organizationId || !settings) return;
@@ -429,7 +474,17 @@ export default function AiControls({ organizations }: { organizations: Organizat
                 })}
               </ul>
             )}
+            {alertsNextCursor && (
+              <button className="button button-secondary" type="button" disabled={loadingMore !== null} onClick={() => void loadOlder("alerts")}>
+                {loadingMore === "alerts" ? "Loading…" : "Load older alerts"}
+              </button>
+            )}
             {analysesMessage && <p className="ai-help">Saved analysis history: {analysesMessage}</p>}
+            {analysesNextCursor && (
+              <button className="button button-secondary" type="button" disabled={loadingMore !== null} onClick={() => void loadOlder("analysis-results")}>
+                {loadingMore === "analysis-results" ? "Loading…" : "Load older analyses"}
+              </button>
+            )}
           </section>
         </>
       ) : <p className="ai-message ai-message-error">AI settings could not be loaded. Try again or check the deployment health endpoint.</p>}

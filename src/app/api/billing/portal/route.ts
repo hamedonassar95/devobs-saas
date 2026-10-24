@@ -4,11 +4,16 @@ import { getAuthenticatedUserId } from "@/lib/auth/session";
 import { BillingAuthorizationError, requireBillingOwner } from "@/lib/billing/authorization";
 import { requireTenantContext, withTenantTransaction } from "@/lib/tenant/access";
 import { getAppUrl, getStripe } from "@/lib/stripe/client";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 const portalSchema = z.object({ organizationId: z.string().min(1) });
 
 export async function POST(request: Request) {
-  const parsed = portalSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, 4 * 1024);
+  if (body && "tooLarge" in body) {
+    return NextResponse.json({ error: "The billing request is too large." }, { status: 413 });
+  }
+  const parsed = portalSchema.safeParse(body?.data ?? null);
   if (!parsed.success) return NextResponse.json({ error: "Invalid billing request." }, { status: 400 });
   const userId = await getAuthenticatedUserId();
   if (!userId) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });

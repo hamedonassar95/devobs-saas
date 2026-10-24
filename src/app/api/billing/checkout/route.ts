@@ -6,6 +6,7 @@ import { BillingAuthorizationError, requireBillingOwner } from "@/lib/billing/au
 import { requireTenantContext, withTenantTransaction } from "@/lib/tenant/access";
 import { getAppUrl, getStripe } from "@/lib/stripe/client";
 import { stripePriceId } from "@/lib/billing/plans";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 const checkoutSchema = z.object({
   organizationId: z.string().min(1),
@@ -13,7 +14,11 @@ const checkoutSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const parsed = checkoutSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, 4 * 1024);
+  if (body && "tooLarge" in body) {
+    return NextResponse.json({ error: "The checkout request is too large." }, { status: 413 });
+  }
+  const parsed = checkoutSchema.safeParse(body?.data ?? null);
   if (!parsed.success) return NextResponse.json({ error: "Invalid checkout request." }, { status: 400 });
   const userId = await getAuthenticatedUserId();
   if (!userId) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });

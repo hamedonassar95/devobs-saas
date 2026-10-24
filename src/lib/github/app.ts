@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, sign as signJwt, timingSafeEqual } from "node:crypto";
+import { readBoundedResponseJson } from "@/lib/http/bounded-json";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_API_VERSION = "2022-11-28";
@@ -118,26 +119,11 @@ export function verifyInstallState(config: GitHubAppConfig, signedState: string,
 }
 
 async function readJson(response: Response): Promise<unknown> {
-  const declaredLength = response.headers.get("content-length");
-  if (declaredLength && Number(declaredLength) > MAX_RESPONSE_BYTES) throw new GitHubAppError("GitHub returned an oversized response.");
-  const reader = response.body?.getReader();
-  if (!reader) throw new GitHubAppError("GitHub returned an empty response.");
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      throw new GitHubAppError("GitHub returned an oversized response.");
-    }
-    chunks.push(value);
+  try {
+    return await readBoundedResponseJson(response, MAX_RESPONSE_BYTES);
+  } catch {
+    throw new GitHubAppError("GitHub returned an invalid or oversized response.");
   }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch { throw new GitHubAppError("GitHub returned invalid JSON."); }
 }
 
 async function githubRequest(path: string, token: string, method = "GET", body?: unknown): Promise<unknown> {
@@ -160,6 +146,7 @@ async function githubRequest(path: string, token: string, method = "GET", body?:
     throw new GitHubAppError("GitHub could not be reached.");
   }
   if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
     const status = response.status === 401 || response.status === 403 ? 502 : response.status === 404 ? 404 : 502;
     throw new GitHubAppError(status === 404 ? "GitHub resource was not found or is not accessible to this installation." : "GitHub rejected the repository request.", status);
   }
@@ -199,7 +186,10 @@ export async function authorizeUserForInstallation(config: GitHubAppConfig, code
   } catch {
     throw new GitHubAppError("GitHub authorization could not be verified.");
   }
-  if (!tokenResponse.ok) throw new GitHubAppError("GitHub authorization could not be verified.");
+  if (!tokenResponse.ok) {
+    await tokenResponse.body?.cancel().catch(() => undefined);
+    throw new GitHubAppError("GitHub authorization could not be verified.");
+  }
   const tokenPayload = asRecord(await readJson(tokenResponse));
   const userToken = tokenPayload?.access_token;
   if (typeof userToken !== "string" || userToken.length < 20 || userToken.length > 4096) {

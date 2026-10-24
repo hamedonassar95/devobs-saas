@@ -4,9 +4,14 @@ import { verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { consumeAuthAttempt, resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { prisma } from "@/lib/db";
+import { readBoundedJson } from "@/lib/http/bounded-json";
 
 export async function POST(request: Request) {
-  const parsed = credentialsSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, 8 * 1024);
+  if (body && "tooLarge" in body) {
+    return NextResponse.json({ error: "The sign-in request is too large." }, { status: 413 });
+  }
+  const parsed = credentialsSchema.safeParse(body?.data ?? null);
   if (!parsed.success) return NextResponse.json({ error: "Invalid email or password." }, { status: 400 });
 
   const email = parsed.data.email.trim().toLowerCase();
