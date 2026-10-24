@@ -65,7 +65,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
           "",
           verificationUrl,
           "",
-          "The link expires in 24 hours. After opening it, enter the password you chose during registration to complete signup.",
+          "The link expires in 24 hours. After opening it, choose a password to complete signup.",
           "If you did not request this, you can ignore this message.",
         ].join("\n"),
       }),
