@@ -19,11 +19,17 @@ type Incident = {
   }>;
 };
 type ApiList<T> = { items: T[]; nextCursor: string | null; error?: string };
+type PageableResource = "alerts" | "incidents";
 
 const canWrite = (role: Organization["role"] | undefined) => role !== undefined && role !== "VIEWER";
 
 async function readPayload<T>(response: Response): Promise<T | null> {
   return response.json().catch(() => null) as Promise<T | null>;
+}
+
+function appendUnique<T extends { id: string }>(current: T[], incoming: T[]) {
+  const known = new Set(current.map(({ id }) => id));
+  return [...current, ...incoming.filter(({ id }) => !known.has(id))];
 }
 
 function formatTime(value: string) {
@@ -35,12 +41,15 @@ export default function IncidentControls({ organizations }: { organizations: Org
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [alertsNextCursor, setAlertsNextCursor] = useState<string | null>(null);
+  const [incidentsNextCursor, setIncidentsNextCursor] = useState<string | null>(null);
   const [selectedAlertIds, setSelectedAlertIds] = useState<string[]>([]);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(Boolean(organizations.length));
   const [busy, setBusy] = useState(false);
+  const [loadingMore, setLoadingMore] = useState<PageableResource | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const activeOrganization = useRef(organizationId);
@@ -51,6 +60,9 @@ export default function IncidentControls({ organizations }: { organizations: Org
     if (!organizationId) {
       setAlerts([]);
       setIncidents([]);
+      setAlertsNextCursor(null);
+      setIncidentsNextCursor(null);
+      setLoadingMore(null);
       setLoading(false);
       return;
     }
@@ -62,6 +74,9 @@ export default function IncidentControls({ organizations }: { organizations: Org
     setNotice("");
     setAlerts([]);
     setIncidents([]);
+    setAlertsNextCursor(null);
+    setIncidentsNextCursor(null);
+    setLoadingMore(null);
     setSelectedAlertIds([]);
     setReasons({});
     void Promise.all([
@@ -76,6 +91,8 @@ export default function IncidentControls({ organizations }: { organizations: Org
       if (!incidentResponse.ok || !incidentBody) throw new Error(incidentBody?.error ?? "Could not load incident records.");
       setAlerts(alertBody.items);
       setIncidents(incidentBody.items);
+      setAlertsNextCursor(alertBody.nextCursor);
+      setIncidentsNextCursor(incidentBody.nextCursor);
     }).catch((cause: unknown) => {
       if (active && !controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load incident records.");
     }).finally(() => {
@@ -83,6 +100,38 @@ export default function IncidentControls({ organizations }: { organizations: Org
     });
     return () => { active = false; controller.abort(); };
   }, [organizationId]);
+
+  async function loadOlder(resource: PageableResource) {
+    const cursor = resource === "alerts" ? alertsNextCursor : incidentsNextCursor;
+    if (!organizationId || !cursor || loadingMore || busy) return;
+    const requestedOrganizationId = organizationId;
+    setLoadingMore(resource);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/organizations/${encodeURIComponent(requestedOrganizationId)}/${resource}?cursor=${encodeURIComponent(cursor)}`,
+        { cache: "no-store" },
+      );
+      const payload = await readPayload<ApiList<Alert | Incident>>(response);
+      if (!response.ok || !payload || !Array.isArray(payload.items)) {
+        throw new Error(payload?.error ?? `Could not load older ${resource}.`);
+      }
+      if (activeOrganization.current !== requestedOrganizationId) return;
+      if (resource === "alerts") {
+        setAlerts((current) => appendUnique(current, payload.items as Alert[]));
+        setAlertsNextCursor(payload.nextCursor);
+      } else {
+        setIncidents((current) => appendUnique(current, payload.items as Incident[]));
+        setIncidentsNextCursor(payload.nextCursor);
+      }
+    } catch (cause) {
+      if (activeOrganization.current === requestedOrganizationId) {
+        setError(cause instanceof Error ? cause.message : `Could not load older ${resource}.`);
+      }
+    } finally {
+      if (activeOrganization.current === requestedOrganizationId) setLoadingMore(null);
+    }
+  }
 
   function toggleAlert(alertId: string) {
     setSelectedAlertIds((current) => current.includes(alertId)
@@ -110,11 +159,26 @@ export default function IncidentControls({ organizations }: { organizations: Org
       if (!response.ok || !payload?.item) throw new Error(payload?.error ?? "Incident could not be created.");
       if (activeOrganization.current !== organizationId) return;
       setIncidents((current) => [payload.item!, ...current].slice(0, 25));
+      setIncidentsNextCursor(payload.item.id);
       setTitle("");
       setDescription("");
       setSelectedAlertIds([]);
       setReasons({});
       setNotice("Incident recorded. Alert links remain operator-provided context, not proof of a common cause.");
+      try {
+        const refreshResponse = await fetch(`/api/organizations/${encodeURIComponent(organizationId)}/incidents`, { cache: "no-store" });
+        const refreshed = await readPayload<ApiList<Incident>>(refreshResponse);
+        if (refreshResponse.ok && refreshed && activeOrganization.current === organizationId) {
+          setIncidents(refreshed.items);
+          setIncidentsNextCursor(refreshed.nextCursor);
+        } else if (activeOrganization.current === organizationId) {
+          setNotice("Incident was saved. Reload the page if the latest list does not appear.");
+        }
+      } catch {
+        if (activeOrganization.current === organizationId) {
+          setNotice("Incident was saved. Reload the page if the latest list does not appear.");
+        }
+      }
     } catch (cause) {
       if (activeOrganization.current === organizationId) setError(cause instanceof Error ? cause.message : "Incident could not be created.");
     } finally {
@@ -150,7 +214,7 @@ export default function IncidentControls({ organizations }: { organizations: Org
     <section className="ai-console-content" aria-label="Organization incidents">
       <div className="ai-console-toolbar">
         <label htmlFor="incident-organization">Organization</label>
-        <select id="incident-organization" value={organizationId} disabled={busy} onChange={(event) => setOrganizationId(event.target.value)}>
+        <select id="incident-organization" value={organizationId} disabled={busy || loadingMore !== null} onChange={(event) => setOrganizationId(event.target.value)}>
           {organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
         <span className="ai-role-badge">{organization?.role ?? "No organization"}</span>
@@ -186,8 +250,9 @@ export default function IncidentControls({ organizations }: { organizations: Org
                 </article>
               );
             })}
+            {alertsNextCursor && <button className="button button-outline" type="button" disabled={busy || loadingMore !== null} onClick={() => void loadOlder("alerts")}>{loadingMore === "alerts" ? "Loading older alerts…" : "Load older alerts"}</button>}
           </fieldset>
-          <button className="button button-primary" type="submit" disabled={busy || !selectedAlertIds.length}>{busy ? "Saving…" : "Create incident record"}</button>
+          <button className="button button-primary" type="submit" disabled={busy || loadingMore !== null || !selectedAlertIds.length}>{busy ? "Saving…" : "Create incident record"}</button>
         </form>
       )}
       {!loading && organizations.length > 0 && !canWrite(organization?.role) && <p className="ai-help">This membership is read-only. An owner, admin, or member can create or resolve incidents.</p>}
@@ -205,6 +270,7 @@ export default function IncidentControls({ organizations }: { organizations: Org
             {canWrite(organization?.role) && <button className="button button-outline" type="button" disabled={busy} onClick={() => void changeStatus(incident)}>{incident.status === "OPEN" ? "Resolve incident" : "Reopen incident"}</button>}
           </article>
         ))}
+        {incidentsNextCursor && <button className="button button-outline" type="button" disabled={busy || loadingMore !== null} onClick={() => void loadOlder("incidents")}>{loadingMore === "incidents" ? "Loading older incidents…" : "Load older incidents"}</button>}
       </section>
       <p className="incident-causality-note">A shared incident record groups operator-selected signals for review. It does not prove the alerts share a cause or correlate them to a deployment.</p>
     </section>
