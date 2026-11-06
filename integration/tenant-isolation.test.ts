@@ -9,6 +9,7 @@ import { consumeAuthAttempt, resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { POST as receiveMonitoringWebhook } from "@/app/api/webhooks/monitoring/[organizationId]/[sourceId]/route";
 import { createMonitoringWebhookToken, hashMonitoringWebhookToken } from "@/lib/monitoring/webhook-token";
 import { getUtcDayStart, recordAiAnalysisOutcome, reserveAiAnalysisRequest } from "@/lib/analysis/usage";
+import { createIncident, getIncident, setIncidentStatus } from "@/lib/incidents/service";
 
 const suffix = randomUUID();
 const aiUsageTestDay = getUtcDayStart(new Date(Date.UTC(2035, 0, 1) + (Number.parseInt(suffix.replaceAll("-", "").slice(0, 8), 16) % 3650) * 24 * 60 * 60 * 1000));
@@ -130,8 +131,13 @@ describe("PostgreSQL tenant isolation policies", () => {
     })).rejects.toThrow();
     expect(await prisma.monitoringWebhookCredential.findMany({})).toEqual([]);
     expect(await prisma.aiProviderUsageDaily.findMany({ where: { day: aiUsageTestDay } })).toEqual([]);
+    expect(await prisma.incident.findMany({ where: { organizationId: organizationAId } })).toEqual([]);
+    expect(await prisma.incidentAlert.findMany({ where: { organizationId: organizationAId } })).toEqual([]);
     await expect(prisma.monitoringWebhookCredential.create({
       data: { organizationId: organizationAId, sourceId: monitoringSourceAId, tokenHash: createHash("sha256").update("no-context").digest("hex") },
+    })).rejects.toThrow();
+    await expect(prisma.incident.create({
+      data: { organizationId: organizationAId, createdByUserId: userAId, title: "Missing tenant context" },
     })).rejects.toThrow();
   });
 
@@ -282,6 +288,47 @@ describe("PostgreSQL tenant isolation policies", () => {
     expect(deletion.count).toBe(0);
     const analysis = await withTenantTransaction(tenantA, (tx) => getTenantResource(tx, tenantA, "analysis-results", analysisBId));
     expect(analysis).toBeNull();
+  });
+
+  it("keeps manually created incidents and alert links tenant-scoped", async () => {
+    const incidentA = await withTenantTransaction(tenantA, (tx) => createIncident(tx, tenantA, {
+      title: `Incident A ${suffix}`,
+      alerts: [{ alertId: alertAId, reason: "Same service and operator-confirmed impact window." }],
+    }));
+    const incidentB = await withTenantTransaction(tenantB, (tx) => createIncident(tx, tenantB, {
+      title: `Incident B ${suffix}`,
+      alerts: [{ alertId: alertBId, reason: "Same service and operator-confirmed impact window." }],
+    }));
+
+    expect(incidentA?.organizationId).toBe(organizationAId);
+    expect(incidentA?.alertLinks[0]).toMatchObject({
+      organizationId: organizationAId,
+      alertId: alertAId,
+      linkedByUserId: userAId,
+      linkReason: "Same service and operator-confirmed impact window.",
+      alert: { id: alertAId },
+    });
+    expect(await withTenantTransaction(tenantB, (tx) => getIncident(tx, tenantB, incidentA?.id ?? "missing"))).toBeNull();
+    expect((await withTenantTransaction(tenantA, (tx) => getIncident(tx, tenantA, incidentB?.id ?? "missing")))).toBeNull();
+    expect(await prisma.incident.findMany({ where: { organizationId: organizationAId } })).toEqual([]);
+
+    await expect(withTenantTransaction(tenantA, (tx) => tx.incidentAlert.create({
+      data: {
+        organizationId: organizationAId,
+        incidentId: incidentA?.id ?? "missing",
+        alertId: alertBId,
+        linkedByUserId: userAId,
+        linkReason: "Forged cross-tenant relationship.",
+      },
+    }))).rejects.toThrow();
+
+    await expect(withTenantTransaction(tenantA, (tx) => setIncidentStatus(tx, tenantA, incidentB?.id ?? "missing", "RESOLVED")))
+      .resolves.toBeNull();
+    const resolved = await withTenantTransaction(tenantA, (tx) => setIncidentStatus(tx, tenantA, incidentA?.id ?? "missing", "RESOLVED"));
+    expect(resolved).toMatchObject({ status: "RESOLVED", resolvedByUserId: userAId });
+    expect(resolved?.resolvedAt).toBeInstanceOf(Date);
+    const reopened = await withTenantTransaction(tenantA, (tx) => setIncidentStatus(tx, tenantA, incidentA?.id ?? "missing", "OPEN"));
+    expect(reopened).toMatchObject({ status: "OPEN", resolvedByUserId: null, resolvedAt: null });
   });
 
   it("rejects writes that bypass the scoped repository and cross-tenant foreign keys", async () => {

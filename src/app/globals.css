@@ -1786,6 +1786,92 @@ textarea {
   color: var(--ink);
   background: var(--surface);
 }
+.incident-create-form,
+.incident-list {
+  display: grid;
+  gap: 14px;
+  padding: clamp(20px, 3vw, 30px);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), var(--surface);
+}
+.incident-create-form h2,
+.incident-list h2 {
+  margin: 4px 0;
+}
+.incident-create-form > div > p:last-child,
+.incident-card p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.incident-create-form > label,
+.incident-create-form legend {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.incident-create-form input:not([type="checkbox"]),
+.incident-create-form textarea,
+.incident-alert-option textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid rgba(190, 221, 206, 0.24);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+.incident-create-form fieldset {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.incident-alert-option,
+.incident-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
+}
+.incident-alert-option > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.incident-alert-option span {
+  display: grid;
+  gap: 4px;
+}
+.incident-alert-option small {
+  color: var(--muted);
+}
+.incident-list > header,
+.incident-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.incident-card h3,
+.incident-card p {
+  margin: 0;
+}
+.incident-card ul {
+  display: grid;
+  gap: 10px;
+  padding-inline-start: 20px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.incident-causality-note {
+  color: var(--muted);
+  font-size: 13px;
+}
 .ai-role-badge,
 .ai-count {
   padding: 6px 10px;
