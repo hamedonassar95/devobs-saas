@@ -54,6 +54,11 @@ enum AlertStatus {
   RESOLVED
 }
 
+enum IncidentStatus {
+  OPEN
+  RESOLVED
+}
+
 enum SubscriptionPlan {
   MONITORING
   CICD
@@ -82,6 +87,7 @@ model Organization {
   ciCdIntegrations      CiCdIntegration[]
   monitoringSources     MonitoringSource[]
   alerts                Alert[]
+  incidents             Incident[]
   analysisResults       AnalysisResult[]
   aiAnalysisUsageDaily  AiAnalysisUsageDaily[]
   githubAppInstallation GitHubAppInstallation?
@@ -104,6 +110,9 @@ model User {
   memberships               Membership[]
   sessions                  Session[]
   githubAppInstallations    GitHubAppInstallation[]
+  createdIncidents          Incident[]              @relation("IncidentCreatedBy")
+  resolvedIncidents         Incident[]              @relation("IncidentResolvedBy")
+  linkedIncidentAlerts      IncidentAlert[]         @relation("IncidentAlertLinkedBy")
 
   @@map("users")
 }
@@ -228,12 +237,51 @@ model Alert {
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   source          MonitoringSource? @relation(fields: [organizationId, sourceId], references: [organizationId, id], onDelete: Restrict)
   analysisResults AnalysisResult[]
+  incidentLinks   IncidentAlert[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, sourceId, externalId])
   @@index([organizationId, status, severity])
   @@index([organizationId, sourceId])
   @@map("alerts")
+}
+
+model Incident {
+  id               String          @id @default(cuid())
+  organizationId   String
+  title            String
+  description      String?
+  status           IncidentStatus  @default(OPEN)
+  createdByUserId  String
+  resolvedByUserId String?
+  openedAt         DateTime        @default(now())
+  resolvedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy        User            @relation("IncidentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  resolvedBy       User?           @relation("IncidentResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  alertLinks       IncidentAlert[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, openedAt])
+  @@map("incidents")
+}
+
+model IncidentAlert {
+  organizationId String
+  incidentId     String
+  alertId        String
+  linkedByUserId String
+  linkReason     String
+  linkedAt       DateTime @default(now())
+  incident       Incident @relation(fields: [organizationId, incidentId], references: [organizationId, id], onDelete: Cascade)
+  alert          Alert    @relation(fields: [organizationId, alertId], references: [organizationId, id], onDelete: Cascade)
+  linkedBy       User     @relation("IncidentAlertLinkedBy", fields: [linkedByUserId], references: [id], onDelete: Restrict)
+
+  @@id([organizationId, incidentId, alertId])
+  @@index([organizationId, alertId])
+  @@map("incident_alerts")
 }
 
 model MonitoringWebhookCredential {
