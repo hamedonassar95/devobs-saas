@@ -15,6 +15,8 @@ The first version supports `OPEN` and `RESOLVED` status. Resolution records the 
 
 All endpoints require an active organization membership and the Monitoring plan entitlement. Reads require the `read` role permission; writes require `write`. Requests run inside the existing transaction-local tenant context. The API bounds request body size and list size, returns `Cache-Control: no-store`, and does not accept a client-supplied organization ID in write data.
 
+The incidents dashboard can page through older incident records and alerts. It loads the next page only after an operator requests it; cursors are resolved inside the active tenant context before paging.
+
 ## Tenant and evidence boundaries
 
 Both tables use forced PostgreSQL row-level security. Composite foreign keys bind each linked alert to the same `organizationId` as its incident. This prevents an incident link from crossing tenant boundaries even if a caller bypasses the application service. Foreign keys retain actor identity for creation and linking. Deleting an alert removes its incident link; deleting an organization cascades its records.
