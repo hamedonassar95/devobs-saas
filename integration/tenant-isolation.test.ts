@@ -9,7 +9,7 @@ import { consumeAuthAttempt, resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { POST as receiveMonitoringWebhook } from "@/app/api/webhooks/monitoring/[organizationId]/[sourceId]/route";
 import { createMonitoringWebhookToken, hashMonitoringWebhookToken } from "@/lib/monitoring/webhook-token";
 import { getUtcDayStart, recordAiAnalysisOutcome, reserveAiAnalysisRequest } from "@/lib/analysis/usage";
-import { createIncident, getIncident, setIncidentStatus } from "@/lib/incidents/service";
+import { createIncident, getIncident, listIncidents, setIncidentStatus } from "@/lib/incidents/service";
 
 const suffix = randomUUID();
 const aiUsageTestDay = getUtcDayStart(new Date(Date.UTC(2035, 0, 1) + (Number.parseInt(suffix.replaceAll("-", "").slice(0, 8), 16) % 3650) * 24 * 60 * 60 * 1000));
@@ -310,6 +310,8 @@ describe("PostgreSQL tenant isolation policies", () => {
     });
     expect(await withTenantTransaction(tenantB, (tx) => getIncident(tx, tenantB, incidentA?.id ?? "missing"))).toBeNull();
     expect((await withTenantTransaction(tenantA, (tx) => getIncident(tx, tenantA, incidentB?.id ?? "missing")))).toBeNull();
+    expect(await withTenantTransaction(tenantA, (tx) => listIncidents(tx, tenantA, { take: 26, cursor: incidentB?.id ?? "missing" }))).toEqual([]);
+    expect(await withTenantTransaction(tenantA, (tx) => listIncidents(tx, tenantA, { take: 26, cursor: incidentA?.id ?? "missing" }))).toEqual([]);
     expect(await prisma.incident.findMany({ where: { organizationId: organizationAId } })).toEqual([]);
 
     await expect(withTenantTransaction(tenantA, (tx) => tx.incidentAlert.create({

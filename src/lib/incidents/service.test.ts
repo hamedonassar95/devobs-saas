@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@prisma/client";
 import type { TenantContext } from "@/lib/tenant/access";
-import { createIncident, IncidentAlertsNotFoundError, setIncidentStatus } from "./service";
+import { createIncident, IncidentAlertsNotFoundError, listIncidents, setIncidentStatus } from "./service";
 
 const tenant: TenantContext = { userId: "user-a", organizationId: "org-a" };
 
 function createClient() {
   return {
     alert: { findMany: vi.fn() },
-    incident: { create: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    incident: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     incidentAlert: { createMany: vi.fn() },
   } as unknown as Prisma.TransactionClient;
 }
@@ -59,6 +59,30 @@ describe("manual incident service", () => {
     })).rejects.toBeInstanceOf(IncidentAlertsNotFoundError);
     expect(tx.incident.create).not.toHaveBeenCalled();
     expect(tx.incidentAlert.createMany).not.toHaveBeenCalled();
+  });
+
+  it("binds incident history cursors to the active tenant before paging", async () => {
+    vi.mocked(tx.incident.findFirst).mockResolvedValue({ id: "incident-cursor" } as never);
+    vi.mocked(tx.incident.findMany).mockResolvedValue([] as never);
+
+    await listIncidents(tx, tenant, { take: 26, cursor: "incident-cursor" });
+
+    expect(tx.incident.findFirst).toHaveBeenCalledWith({
+      where: { organizationId: tenant.organizationId, id: "incident-cursor" },
+      select: { id: true },
+    });
+    expect(tx.incident.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { organizationId: tenant.organizationId },
+      cursor: { organizationId_id: { organizationId: tenant.organizationId, id: "incident-cursor" } },
+      skip: 1,
+    }));
+  });
+
+  it("returns no page when the cursor is not visible to the active tenant", async () => {
+    vi.mocked(tx.incident.findFirst).mockResolvedValue(null);
+
+    await expect(listIncidents(tx, tenant, { take: 26, cursor: "foreign-incident" })).resolves.toEqual([]);
+    expect(tx.incident.findMany).not.toHaveBeenCalled();
   });
 
   it("records resolver identity and clears resolution fields when reopened", async () => {

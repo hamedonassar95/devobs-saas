@@ -37,11 +37,22 @@ export async function listIncidents(
   tenant: TenantContext,
   page: { take: number; cursor?: string },
 ) {
+  const visibleCursor = page.cursor
+    ? await tx.incident.findFirst({
+      where: { organizationId: tenant.organizationId, id: page.cursor },
+      select: { id: true },
+    })
+    : null;
+  if (page.cursor && !visibleCursor) return [];
+
   return tx.incident.findMany({
     where: { organizationId: tenant.organizationId },
     orderBy: [{ openedAt: "desc" }, { id: "desc" }],
     take: page.take,
-    ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
+    ...(visibleCursor ? {
+      cursor: { organizationId_id: { organizationId: tenant.organizationId, id: visibleCursor.id } },
+      skip: 1,
+    } : {}),
     include: incidentInclude,
   });
 }
