@@ -5,6 +5,10 @@ Multi-tenant DevOps SaaS foundation built with Next.js, TypeScript, Prisma, and 
 
 See [the GitHub App setup guide](docs/devobs-control-room-github-app.md) for the tenant-scoped Devobs Control Room integration and its permission boundaries.
 
+## Container image vulnerability scanning
+
+CI builds and scans both the production `runner` and database `migrator` Docker targets with pinned Trivy. Missing/failed scans and HIGH or CRITICAL OS/library vulnerabilities block the `image-security-scan` job; the protected Netlify production job depends on its success. Review the uploaded JSON reports before approving any deployment. Run `npm run test:security-gate` to verify fail-closed behavior without Docker. For coverage, remediation, operational constraints, and the inactive GCP path, see [container image security scanning](docs/security/container-image-scanning.md).
+
 ## Local setup
 
 1. Install Node.js 22 or newer and PostgreSQL.

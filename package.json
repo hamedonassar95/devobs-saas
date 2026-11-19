@@ -12,7 +12,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy"
+    "db:migrate:deploy": "prisma migrate deploy",
+    "test:security-gate": "node --test scripts/trivy-report-gate.test.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
