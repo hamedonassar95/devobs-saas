@@ -73,17 +73,22 @@ test("unknown vulnerability severity fails closed", () => {
   assert.equal(evaluate(report("devobs-saas:ci", [vuln("BAD-SEVERITY")])).passed, false);
 });
 
-// Static regression checks: prevent a future CI edit from silently dropping
-// either Docker target or the required production deployment dependency.
+// Static regression checks prevent accidental loss of coverage in CI.
 test("CI scans both Docker targets and gates Netlify deploy", async () => {
   const { readFileSync } = await import("node:fs");
   const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
-  assert.match(workflow, /image-security-scan:\\n/);
-  assert.match(workflow, /--target runner --tag devobs-saas:ci/);
-  assert.match(workflow, /--target migrator --tag devobs-saas:migrator-ci/);
-  assert.match(workflow, /image-ref: devobs-saas:ci/);
-  assert.match(workflow, /image-ref: devobs-saas:migrator-ci/);
-  assert.match(workflow, /needs: \\[node, verify, image-security-scan\\]/);
-  assert.match(workflow, /TRIVY_RUNNER_OUTCOME:.*scan_runner\\.outcome/);
-  assert.match(workflow, /TRIVY_MIGRATOR_OUTCOME:.*scan_migrator\\.outcome/);
+  for (const expected of [
+    "image-security-scan:",
+    "--target runner --tag devobs-saas:ci",
+    "--target migrator --tag devobs-saas:migrator-ci",
+    "image-ref: devobs-saas:ci",
+    "image-ref: devobs-saas:migrator-ci",
+    "needs: [node, verify, image-security-scan]",
+    "TRIVY_RUNNER_OUTCOME:",
+    "TRIVY_MIGRATOR_OUTCOME:",
+    "scan_runner.outcome",
+    "scan_migrator.outcome",
+  ]) {
+    assert.ok(workflow.includes(expected), `missing CI guard: ${expected}`);
+  }
 });
