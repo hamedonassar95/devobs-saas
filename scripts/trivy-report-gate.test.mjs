@@ -72,3 +72,18 @@ test("absent Results or malformed vulnerabilities cannot masquerade as clean", (
 test("unknown vulnerability severity fails closed", () => {
   assert.equal(evaluate(report("devobs-saas:ci", [vuln("BAD-SEVERITY")])).passed, false);
 });
+
+// Static regression checks: prevent a future CI edit from silently dropping
+// either Docker target or the required production deployment dependency.
+test("CI scans both Docker targets and gates Netlify deploy", async () => {
+  const { readFileSync } = await import("node:fs");
+  const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+  assert.match(workflow, /image-security-scan:\\n/);
+  assert.match(workflow, /--target runner --tag devobs-saas:ci/);
+  assert.match(workflow, /--target migrator --tag devobs-saas:migrator-ci/);
+  assert.match(workflow, /image-ref: devobs-saas:ci/);
+  assert.match(workflow, /image-ref: devobs-saas:migrator-ci/);
+  assert.match(workflow, /needs: \\[node, verify, image-security-scan\\]/);
+  assert.match(workflow, /TRIVY_RUNNER_OUTCOME:.*scan_runner\\.outcome/);
+  assert.match(workflow, /TRIVY_MIGRATOR_OUTCOME:.*scan_migrator\\.outcome/);
+});
