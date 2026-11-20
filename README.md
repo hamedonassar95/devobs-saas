@@ -5,6 +5,12 @@ Multi-tenant DevOps SaaS foundation built with Next.js, TypeScript, Prisma, and 
 
 See [the GitHub App setup guide](docs/devobs-control-room-github-app.md) for the tenant-scoped Devobs Control Room integration and its permission boundaries.
 
+## Local Graphify index (opt-in, offline)
+
+A read-only local code index for this repository is documented in
+[docs/graphify-local.md](docs/graphify-local.md). No source is uploaded and no
+CI, deployment or permission setting is changed.
+
 ## Local setup
 
 1. Install Node.js 22 or newer and PostgreSQL.
